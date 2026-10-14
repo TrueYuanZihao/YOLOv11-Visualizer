@@ -1,0 +1,16 @@
+# 统一用 LF 存进仓库，避免 Windows / macOS / Linux 之间出现整文件 diff
+* text=auto eol=lf
+
+# 二进制文件：不做行尾转换，也不要做文本 diff
+*.onnx  binary
+*.pt    binary
+*.pth   binary
+*.wasm  binary
+*.jpg   binary
+*.jpeg  binary
+*.png   binary
+*.webp  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary

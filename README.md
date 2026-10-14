@@ -1,125 +1,141 @@
-﻿# YOLOv11 图像处理可视化工作台
+# YOLO11 特征激活可视化工作坊
 
-把「黑箱」拆开给你看：从输入图像进入网络，到 NMS 输出最终检测框，
-**每一层张量的形状变化与特征图**都在网页上逐层呈现，并且可以点击、拖拽、拖动滑块实时互动。
+用 **真实预训练权重**（`yolo11n.pt`）在浏览器里逐层查看 YOLO11 的特征激活。
+不是示意图：网页里跑的是一次真正的 ONNX 前向传播，每一层的热力图都来自该次推理的真实张量。
 
-```
-双击 index.html 即可运行（零依赖、纯离线、无需 Node / 无需联网）
-```
-
-![工作台总览](shots/preview-overview.png)
-
-> 上：主干 C3k2 层（40×40×512）的单通道特征图；下：输出层的 NMS 检测结果。
-
-![输出层](shots/preview-output.png)
+技术栈：**Vite + React 19 + Three.js + onnxruntime-web（WASM）**。
 
 ---
 
-## 1. 它做了什么
+## 快速开始
 
-| 能力 | 说明 |
+```powershell
+npm install          # 会自动把 onnxruntime-web 的 wasm 运行时复制到 public/ort
+npm run dev          # http://localhost:5173
+```
+
+想自己重新导出模型（需要仓库里的 Python 环境）：
+
+```powershell
+npm run export:onnx  # .venv312 里跑 tools/export_onnx.py --imgsz 320
+npm run verify:onnx  # 与 torch 输出对比，验证导出正确
+```
+
+### 仓库里有什么
+
+入库（约 **16 MB / 50 个文件**）：
+
+| 内容 | 说明 |
 | --- | --- |
-| 逐层展开 | 25 个阶段：输入 → 预处理 → 主干 Backbone → SPPF / C2PSA → 颈部 PAN-FPN → 三个检测头 → NMS 输出 |
-| 真实计算 | 每层特征图都是对上一层做**真实的卷积 / 最大池化 / 上采样 / 通道拼接**得到的，不是贴图 |
-| 通道浏览 | 每层抽取 16 个通道，可缩略图浏览、滑块扫描、网格并列对比 |
-| 尺度可视化 | 10×10 / 20×20 / 40×40 / 80×80 / 160×160 的真实降采样，可叠加采样网格与格点坐标 |
-| 注意力 | C2PSA 层按通道计算注意力权重并回乘特征，右侧给出权重分布条 |
-| 交互检测 | 拖动置信度 / IoU 滑块，实时重跑筛选与 NMS，框的数量与位置随之变化 |
-| 跨层联动 | 悬停检测结果 → 在对应检测头尺度上高亮命中的格点区域 |
-| 张量读数 | 每层的 `W×H×C`、下采样步长、MACs 估算、累计占比、整条链路耗时 |
+| `src/` `index.html` `vite.config.js` `package*.json` `tools/` | 全部源码与配置 |
+| `public/models/yolo11n_vis.onnx` | 10 MB，跑起来必需，已入库 |
+| `public/models/layers.json` `public/samples/street.jpg` | 层清单与示例图 |
+| `ultralytics-main/ultralytics/yolo11n.pt` | 5.4 MB，只为「重新导出 ONNX」保留 |
+
+不入库（`.gitignore` 已排除，都能一条命令再生）：
+
+| 内容 | 体积 | 怎么回来 |
+| --- | --- | --- |
+| `node_modules/` | 240 MB | `npm install` |
+| `.venv/` `.venv312/` | 1.0 GB | 重建 Python 环境（仅重新导出模型时才需要） |
+| `dist/` | 121 MB | `npm run build` |
+| `public/ort/` | 82 MB | `npm install` 的 postinstall 自动执行 `tools/sync-ort.mjs` |
+| `ultralytics-main/`（除权重） | 25 MB | 从上游仓库重新拉取 |
+| `shots/` | — | `npm run probe` 生成的截图与无头浏览器 profile |
+
+验过一遍：把入库文件复制到空目录后执行 `npm install` → `npm run dev`，模型加载正常、前向 165 ms、25 个张量齐全、四个视图均无报错。
 
 ---
 
-## 2. 真实 vs 示意（重要）
+## 它是怎么工作的
 
-这个工具的定位是**结构与流程的可视化教具**，不是推理引擎。请看这张对照表：
+```
+street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ ONNX Runtime (wasm)
+                                                              │
+                          24 个图输出 + output0 ◀──────────────┘
+                                    │
+        ┌───────────────────────────┼────────────────────────────┐
+   逐层统计/RMS 通道能量       检测解码 + NMS              可视化渲染
+   （右侧统计面板）           （检测结果面板）       （2D 热力图 / 3D 堆叠）
+```
 
-| 项目 | 是否真实 |
-| --- | --- |
-| 网络拓扑、层类型顺序、通道数、下采样步长 | ✅ 与 Ultralytics `yolo11.yaml`（n 尺度）一致 |
-| 特征图的空间尺寸（P1/2 … P5/32） | ✅ 真实 |
-| 卷积 / 池化 / 上采样 / 拼接 等算子 | ✅ 真实实现（纯 JS） |
-| 特征图的像素值 | ⚠️ 由**人工设计的固定卷积核**算出，不是训练权重 |
-| 通道注意力权重 | ⚠️ 由真实的通道统计量 + 固定小 MLP 算出 |
-| 检测框位置与数量 | ⚠️ 多尺度显著度极大值 + 真实 NMS，位置随图像真实变化 |
-| 类别标签与置信度 | ⚠️ 颜色 / 长宽比 / 尺度等启发式规则推断 |
+一次前向大约 **180 ms**（CPU / wasm，4 线程），拿到 25 个张量。
 
-也就是说：**形状、流程、交互是真的；数值与语义是示意**。界面上所有示意部分都带了「示意核权重」标记。
+### 模型契约
 
-### 想换成真实权重？
+`tools/export_onnx.py` 把 YOLO11 的中间张量加进 ONNX 的 `graph.output`：
 
-把 `js/pipeline.js` 里的 `channelsFromFeatures()`（人工核混合）替换成真实前向即可，其余部分不用动：
+- 输入：`images` `[1, 3, 320, 320]` float32（动态维度）
+- 输出：`output0` `[1, 84, 2100]`（4 个框坐标 + 80 类分数，DFL 已在导出时解码）
+- 另外 23 个输出：`/model.0/act/Mul_output_0` … `/model.22/cv2/act/Mul_output_0`
+- 附带 `images` 本身作为输出，方便直接查看预处理后的输入张量
 
-1. 用 `onnxruntime-web` 加载 `yolo11n.onnx`
-2. 把中间层张量名字加入 `graph.output`（改一下 ONNX protobuf），一次推理就能拿到所有中间层
-3. `channelsFromFeatures()` 的产物直接换成真实张量，`render.js` / `app.js` 无需改动
-
-（当前环境无法访问 CDN，因此 v1 没有内置 ONNX 路径；离线可用的示意版反而更适合当教学 demo。）
+`public/models/layers.json` 描述这 27 个阶段（input / pre / m0…m23 / output），
+包含模块名、stride、所属分组和一段中文说明。
 
 ---
 
-## 3. 怎么用
+## 界面
 
-### 运行
+- **左侧 流水线**：backbone / neck / head 分组的 27 个阶段。点选任意层，右侧条形长度表示该层激活的 RMS 能量（检测头 logits 量级过大，已排除在归一化之外）。
+- **中间 视口**：四个视图
+  - `2D 特征图`：单通道 / PCA 三通道合成 / 通道均值 / 最大值 / L2，可叠加原图、叠加检测框，鼠标悬停可读出**某个像素的真实激活值**，底部有色标图例与显示区间。
+  - `通道网格`：按能量排序的前 12 个通道小图矩阵，一眼看出特征分化。
+  - `3D 特征金字塔`：每一层的特征图作为一块切片，沿深度斜向堆成一摞，点击切片切换选中层。
+  - `3D 通道堆叠`：把选中层能量最高的若干通道叠成多层「地形图」，**激活值直接做高度位移**，可调起伏幅度。
+- **右侧 控制面板**：配色（viridis/inferno/turbo/ice/灰度/冷暖）、伽马、显示区间（百分位/minmax）、通道、堆叠间距、通道数量、置信度阈值与 NMS IoU。
+- **右侧 统计面板**：选中层的均值/标准差/极值/RMS/正值占比，以及通道能量排行。
 
-- **最简单**：双击 `index.html`
-- **推荐**（避免个别浏览器对 `file://` 的限制）：
-  ```bash
-  cd Visualize
-  python -m http.server 8000
-  # 浏览器打开 http://localhost:8000/
-  ```
+### 真实 vs. 推断
 
-### 交互
-
-| 操作 | 效果 |
+| 内容 | 来源 |
 | --- | --- |
-| 点击左侧结构图任意一层 | 跳转到该层，画布切换为该层特征图 |
-| 拖拽画布 | 平移；滚轮缩放；双击复位 |
-| 拖动「通道浏览」滑块 / 点击缩略图 | 切换通道 |
-| 视图模式：单通道 / 通道网格 / 叠加原图 | 网格看 16 通道全貌，叠加看激活落在原图哪里 |
-| 伪彩色映射 + 对比度 γ | 换配色 / 拉对比度 |
-| 网络输入尺寸 256/320/384/448 | **真实重算整条链路** |
-| 置信度 / IoU 阈值 | 实时重跑筛选与 NMS |
-| 悬停右侧检测结果 | 高亮对应检测头上的格点 |
-| `▶ 逐层播放` / `←` `→` / `空格` | 自动逐层播放、前后翻层、播放暂停 |
-| 上传图片 / 拖拽图片到画布 | 用自己的图跑整条链路 |
-
-### URL 参数（方便分享与自动化截图）
-
-```
-index.html?stage=12&view=grid&cmap=inferno&channel=3&base=384&conf=0.5&debug=1
-```
-
-`stage` 层序号 · `view` single|grid|overlay · `cmap` viridis|inferno|turbo|ice|gray ·
-`channel` 通道号 · `base` 输入尺寸 · `conf`/`iou` 阈值 · `sample` 示例编号 · `debug=1` 显示自检信息
+| 每层张量数值、形状、统计、热力图 | **真实** 权重前向结果 |
+| 检测框、类别、置信度 | **真实** NMS 解码结果 |
+| PCA / 通道能量 / 高斯起伏 | 对真实张量的后处理 |
+| 层的语义说明（`layers.json` 的 `desc`） | 人工撰写，属解释性文字 |
 
 ---
 
-## 4. 目录结构
+## 目录结构
 
 ```
-Visualize/
-├─ index.html          页面骨架
-├─ styles.css          深色实验室风格样式
-├─ js/
-│  ├─ kernels.js       基础算子：3×3 卷积 / 池化 / 重采样 / 色彩映射 / 归一化
-│  ├─ samples.js       3 个内置示例场景（Canvas 现场绘制，无外部图片）
-│  ├─ detector.js      显著度 → 多尺度候选框 → 真实 NMS（检测头与输出层）
-│  ├─ pipeline.js      YOLOv11 结构表 + 逐层前向计算（核心）
-│  ├─ render.js        画布查看器：缩放 / 平移 / 网格 / 标注
-│  └─ app.js           状态机、控件绑定、渲染调度
-├─ tools/shot.ps1      开发辅助：无头 Edge 截图 / 导出 DOM
-└─ shots/              截图输出（可删）
+index.html              入口
+src/
+  App.jsx               状态编排：加载模型 → 预处理 → 前向 → 分发可视化
+  model/
+    runner.js           ORT 执行器（Worker / 主线程共用）
+    ortWorker.js        Web Worker 外壳
+    session.js          会话封装，Worker 不可用时退回主线程
+    preprocess.js       ultralytics 一致的 letterbox + NCHW 归一化
+    detect.js           output0 解码 + 逐类 NMS
+    layers.js           资源路径 + layers.json 加载
+  viz/
+    field.js            统计、百分位归一化、通道能量、PCA 合成
+    colormap.js         伪彩色表
+    render.js           标量场 → canvas
+    FeatureCanvas.jsx   2D 视图
+    ChannelGrid.jsx     通道网格
+    VolStack.jsx        Three.js 3D 堆叠（金字塔 / 通道地形）
+  components/           流水线、控制面板、检测结果、统计面板
+public/
+  models/               yolo11n_vis.onnx + layers.json
+  ort/                  onnxruntime-web 运行时（postinstall 自动同步）
+  samples/street.jpg
+tools/
+  export_onnx.py        导出带中间层的 ONNX
+  verify_onnx.py        与 torch 结果比对
+  sync-ort.mjs          同步 wasm 运行时
+  probe.mjs             用 Edge 做端到端验证（控制台日志 + 四个视图截图）
+  layers.mjs            逐层冒烟测试（input / pre / m0 / m12 / m22 / output）
+legacy/                 第一版「示意内核」可视化，保留作对照
 ```
 
-## 5. 性能
+---
 
-| 输入尺寸 | 整条链路耗时（纯 JS 单线程，实测参考） |
-| --- | --- |
-| 256 | ≈ 0.4 s |
-| 320（默认） | ≈ 0.6 s |
-| 448 | ≈ 1.0 s |
+## 已知限制
 
-计算量集中在第一个 `Conv k3 s2` 层（分辨率最高、通道混合最多），越深的层越便宜。
-每层特征图算完即缓存，切换层和调滑块不会重算网络；只有改「输入尺寸」或换图才会重跑整条链路。
+- 只支持 CPU（wasm）执行；WebGPU 后端未启用。
+- 模型按 `imgsz=320` 导出，位置编码与锚点数量（2100）与之绑定；换尺寸需重新导出。
+- 3D 金字塔的「单通道」配色对所有层使用同一个通道索引，不同层的通道语义并不对齐，仅作参考。
+- `public/ort` 下的 wasm 从本地加载（CDN 不可达），构建产物因此偏大，属预期行为。
