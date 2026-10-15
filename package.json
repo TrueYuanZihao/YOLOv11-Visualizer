@@ -12,8 +12,10 @@
     "preview": "vite preview --port 4173",
     "export:onnx": ".venv312\\Scripts\\python.exe tools\\export_onnx.py --imgsz 320",
     "verify:onnx": ".venv312\\Scripts\\python.exe tools\\verify_onnx.py",
+    "export:graph": ".venv312\\Scripts\\python.exe tools\\export_graph.py",
     "probe": "node tools/probe.mjs http://localhost:5173/ shots",
-    "probe:layers": "node tools/layers.mjs http://localhost:5173/ shots"
+    "probe:layers": "node tools/layers.mjs http://localhost:5173/ shots",
+    "probe:structure": "node tools/probe-structure.mjs http://localhost:5173/ shots"
   },
   "dependencies": {
     "onnxruntime-web": "^1.30.0",

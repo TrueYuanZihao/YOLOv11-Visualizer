@@ -1,0 +1,595 @@
+{
+ "meta": {
+  "imgsz": 320,
+  "source": "public/models/yolo11n_vis.onnx",
+  "onnxNodes": 581,
+  "modules": 24,
+  "generatedBy": "tools/export_graph.py"
+ },
+ "nodes": [
+  {
+   "id": "input",
+   "label": "input",
+   "name": "输入图像",
+   "block": "Input",
+   "group": "input",
+   "stride": 1,
+   "shape": "3×320×320",
+   "desc": "原始 RGB 图像，进入网络前会被缩放并 letterbox 到统一尺寸。",
+   "rank": 0,
+   "row": 0
+  },
+  {
+   "id": "pre",
+   "label": "pre",
+   "name": "预处理 · Letterbox",
+   "block": "Preprocess",
+   "group": "input",
+   "stride": 1,
+   "shape": "3×320×320",
+   "desc": "等比缩放 + 灰边填充到正方形，像素归一化到 0~1；这就是网络真正看到的张量。",
+   "rank": 1,
+   "row": 0
+  },
+  {
+   "id": "m0",
+   "label": "m0",
+   "name": "Conv k3 s2",
+   "block": "Conv",
+   "group": "backbone",
+   "stride": 2,
+   "shape": "16×160×160",
+   "desc": "第一次卷积并把分辨率降一半。学到的多是边缘、色块等低级特征。",
+   "rank": 2,
+   "row": 0
+  },
+  {
+   "id": "m1",
+   "label": "m1",
+   "name": "Conv k3 s2",
+   "block": "Conv",
+   "group": "backbone",
+   "stride": 4,
+   "shape": "32×80×80",
+   "desc": "第二次下采样。感受野变大，开始出现纹理与局部结构。",
+   "rank": 3,
+   "row": 0
+  },
+  {
+   "id": "m2",
+   "label": "m2",
+   "name": "C3k2 特征提取块",
+   "block": "C3k2",
+   "group": "backbone",
+   "stride": 4,
+   "shape": "64×80×80",
+   "desc": "通道先分裂再走不同数量的瓶颈分支，最后拼接融合。",
+   "rank": 4,
+   "row": 0
+  },
+  {
+   "id": "m3",
+   "label": "m3",
+   "name": "Conv k3 s2",
+   "block": "Conv",
+   "group": "backbone",
+   "stride": 8,
+   "shape": "64×40×40",
+   "desc": "进入 P3/8 尺度，检测小目标的主力尺度。",
+   "rank": 5,
+   "row": 0
+  },
+  {
+   "id": "m4",
+   "label": "m4",
+   "name": "C3k2 特征提取块",
+   "block": "C3k2",
+   "group": "backbone",
+   "stride": 8,
+   "shape": "128×40×40",
+   "desc": "通道数翻倍，语义信息增强，空间细节开始丢失。",
+   "rank": 6,
+   "row": 0
+  },
+  {
+   "id": "m5",
+   "label": "m5",
+   "name": "Conv k3 s2",
+   "block": "Conv",
+   "group": "backbone",
+   "stride": 16,
+   "shape": "128×20×20",
+   "desc": "进入 P4/16 尺度，中等目标的主要尺度。",
+   "rank": 7,
+   "row": 0
+  },
+  {
+   "id": "m6",
+   "label": "m6",
+   "name": "C3k2 特征提取块",
+   "block": "C3k2",
+   "group": "backbone",
+   "stride": 16,
+   "shape": "128×20×20",
+   "desc": "深层特征，一个像素已对应原图 16x16 的区域。",
+   "rank": 8,
+   "row": 0
+  },
+  {
+   "id": "m7",
+   "label": "m7",
+   "name": "Conv k3 s2",
+   "block": "Conv",
+   "group": "backbone",
+   "stride": 32,
+   "shape": "256×10×10",
+   "desc": "进入 P5/32 尺度，特征图很小但感受野覆盖整幅图。",
+   "rank": 9,
+   "row": 0
+  },
+  {
+   "id": "m8",
+   "label": "m8",
+   "name": "C3k2 特征提取块",
+   "block": "C3k2",
+   "group": "backbone",
+   "stride": 32,
+   "shape": "256×10×10",
+   "desc": "主干最深处，表征的是“那里有什么”而不是“长什么样”。",
+   "rank": 10,
+   "row": 0
+  },
+  {
+   "id": "m9",
+   "label": "m9",
+   "name": "SPPF 空间金字塔池化",
+   "block": "SPPF",
+   "group": "backbone",
+   "stride": 32,
+   "shape": "256×10×10",
+   "desc": "三次最大池化串行堆叠（感受野 5/9/13）后并联，一次拿到多尺度上下文。",
+   "rank": 11,
+   "row": 0
+  },
+  {
+   "id": "m10",
+   "label": "m10",
+   "name": "C2PSA 自注意力",
+   "block": "C2PSA",
+   "group": "backbone",
+   "stride": 32,
+   "shape": "256×10×10",
+   "desc": "YOLO11 新增的位置敏感注意力：按通道算注意力权重再回乘特征。",
+   "rank": 12,
+   "row": 0
+  },
+  {
+   "id": "m11",
+   "label": "m11",
+   "name": "Upsample x2",
+   "block": "Upsample",
+   "group": "neck",
+   "stride": 16,
+   "shape": "256×20×20",
+   "desc": "把深层特征放大一倍，准备与 P4 的特征拼接。",
+   "rank": 13,
+   "row": 1
+  },
+  {
+   "id": "m12",
+   "label": "m12",
+   "name": "Concat (主干 P4)",
+   "block": "Concat",
+   "group": "neck",
+   "stride": 16,
+   "shape": "384×20×20",
+   "desc": "与主干第 6 层输出在通道维拼接，把浅层定位信息带进深层。",
+   "rank": 14,
+   "row": 1
+  },
+  {
+   "id": "m13",
+   "label": "m13",
+   "name": "C3k2 融合",
+   "block": "C3k2",
+   "group": "neck",
+   "stride": 16,
+   "shape": "128×20×20",
+   "desc": "拼接后融合，得到中等尺度特征。",
+   "rank": 15,
+   "row": 1
+  },
+  {
+   "id": "m14",
+   "label": "m14",
+   "name": "Upsample x2",
+   "block": "Upsample",
+   "group": "neck",
+   "stride": 8,
+   "shape": "128×40×40",
+   "desc": "再放大一次，准备与 P3 特征拼接。",
+   "rank": 16,
+   "row": 1
+  },
+  {
+   "id": "m15",
+   "label": "m15",
+   "name": "Concat (主干 P3)",
+   "block": "Concat",
+   "group": "neck",
+   "stride": 8,
+   "shape": "256×40×40",
+   "desc": "与主干第 4 层输出拼接，小目标检测的关键路径。",
+   "rank": 17,
+   "row": 1
+  },
+  {
+   "id": "m16",
+   "label": "m16",
+   "name": "C3k2 -> P3 输出",
+   "block": "C3k2",
+   "group": "neck",
+   "stride": 8,
+   "shape": "64×40×40",
+   "desc": "小目标检测头使用的特征：分辨率最高、细节最丰富。",
+   "rank": 18,
+   "row": 1
+  },
+  {
+   "id": "m17",
+   "label": "m17",
+   "name": "Conv k3 s2 下采样",
+   "block": "Conv",
+   "group": "neck",
+   "stride": 16,
+   "shape": "64×20×20",
+   "desc": "自顶向下之后再自底向上，把定位信息带回中层。",
+   "rank": 19,
+   "row": 1
+  },
+  {
+   "id": "m18",
+   "label": "m18",
+   "name": "Concat (颈部 P4)",
+   "block": "Concat",
+   "group": "neck",
+   "stride": 16,
+   "shape": "192×20×20",
+   "desc": "与颈部第 13 层输出拼接。",
+   "rank": 20,
+   "row": 1
+  },
+  {
+   "id": "m19",
+   "label": "m19",
+   "name": "C3k2 -> P4 输出",
+   "block": "C3k2",
+   "group": "neck",
+   "stride": 16,
+   "shape": "128×20×20",
+   "desc": "中目标检测头使用的特征。",
+   "rank": 21,
+   "row": 1
+  },
+  {
+   "id": "m20",
+   "label": "m20",
+   "name": "Conv k3 s2 下采样",
+   "block": "Conv",
+   "group": "neck",
+   "stride": 32,
+   "shape": "128×10×10",
+   "desc": "把信息继续带到最深尺度。",
+   "rank": 22,
+   "row": 1
+  },
+  {
+   "id": "m21",
+   "label": "m21",
+   "name": "Concat (颈部 P5)",
+   "block": "Concat",
+   "group": "neck",
+   "stride": 32,
+   "shape": "384×10×10",
+   "desc": "与颈部第 10 层输出拼接。",
+   "rank": 23,
+   "row": 1
+  },
+  {
+   "id": "m22",
+   "label": "m22",
+   "name": "C3k2 -> P5 输出",
+   "block": "C3k2",
+   "group": "neck",
+   "stride": 32,
+   "shape": "256×10×10",
+   "desc": "大目标检测头使用的特征。",
+   "rank": 24,
+   "row": 1
+  },
+  {
+   "id": "m23",
+   "label": "m23",
+   "name": "Detect 解耦检测头",
+   "block": "Detect",
+   "group": "head",
+   "stride": 0,
+   "shape": "84×2100",
+   "desc": "三条尺度分支各自输出 64 通道边框回归(DFL) + 80 通道类别分数。",
+   "rank": 25,
+   "row": 2
+  },
+  {
+   "id": "output",
+   "label": "output",
+   "name": "输出层 · NMS 之后",
+   "block": "Output",
+   "group": "output",
+   "stride": 1,
+   "shape": "84×2100",
+   "desc": "三个尺度汇总的候选，经置信度筛选与非极大值抑制后得到最终检测框。",
+   "rank": 26,
+   "row": 2
+  }
+ ],
+ "edges": [
+  {
+   "from": "pre",
+   "to": "m0",
+   "tensor": "images",
+   "shape": "3×320×320",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m0",
+   "to": "m1",
+   "tensor": "/model.0/act/Mul_output_0",
+   "shape": "16×160×160",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m1",
+   "to": "m2",
+   "tensor": "/model.1/act/Mul_output_0",
+   "shape": "32×80×80",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m2",
+   "to": "m3",
+   "tensor": "/model.2/cv2/act/Mul_output_0",
+   "shape": "64×80×80",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m3",
+   "to": "m4",
+   "tensor": "/model.3/act/Mul_output_0",
+   "shape": "64×40×40",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m4",
+   "to": "m5",
+   "tensor": "/model.4/cv2/act/Mul_output_0",
+   "shape": "128×40×40",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m5",
+   "to": "m6",
+   "tensor": "/model.5/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m6",
+   "to": "m7",
+   "tensor": "/model.6/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m7",
+   "to": "m8",
+   "tensor": "/model.7/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m8",
+   "to": "m9",
+   "tensor": "/model.8/cv2/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m9",
+   "to": "m10",
+   "tensor": "/model.9/cv2/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m10",
+   "to": "m11",
+   "tensor": "/model.10/cv2/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m11",
+   "to": "m12",
+   "tensor": "/model.11/Resize_output_0",
+   "shape": "256×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m6",
+   "to": "m12",
+   "tensor": "/model.6/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 6,
+   "kind": "skip"
+  },
+  {
+   "from": "m12",
+   "to": "m13",
+   "tensor": "/model.12/Concat_output_0",
+   "shape": "384×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m13",
+   "to": "m14",
+   "tensor": "/model.13/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m14",
+   "to": "m15",
+   "tensor": "/model.14/Resize_output_0",
+   "shape": "128×40×40",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m4",
+   "to": "m15",
+   "tensor": "/model.4/cv2/act/Mul_output_0",
+   "shape": "128×40×40",
+   "span": 11,
+   "kind": "skip"
+  },
+  {
+   "from": "m15",
+   "to": "m16",
+   "tensor": "/model.15/Concat_output_0",
+   "shape": "256×40×40",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m16",
+   "to": "m17",
+   "tensor": "/model.16/cv2/act/Mul_output_0",
+   "shape": "64×40×40",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m17",
+   "to": "m18",
+   "tensor": "/model.17/act/Mul_output_0",
+   "shape": "64×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m13",
+   "to": "m18",
+   "tensor": "/model.13/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 5,
+   "kind": "skip"
+  },
+  {
+   "from": "m18",
+   "to": "m19",
+   "tensor": "/model.18/Concat_output_0",
+   "shape": "192×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m19",
+   "to": "m20",
+   "tensor": "/model.19/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m20",
+   "to": "m21",
+   "tensor": "/model.20/act/Mul_output_0",
+   "shape": "128×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m10",
+   "to": "m21",
+   "tensor": "/model.10/cv2/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 11,
+   "kind": "skip"
+  },
+  {
+   "from": "m21",
+   "to": "m22",
+   "tensor": "/model.21/Concat_output_0",
+   "shape": "384×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m16",
+   "to": "m23",
+   "tensor": "/model.16/cv2/act/Mul_output_0",
+   "shape": "64×40×40",
+   "span": 7,
+   "kind": "skip"
+  },
+  {
+   "from": "m19",
+   "to": "m23",
+   "tensor": "/model.19/cv2/act/Mul_output_0",
+   "shape": "128×20×20",
+   "span": 4,
+   "kind": "skip"
+  },
+  {
+   "from": "m22",
+   "to": "m23",
+   "tensor": "/model.22/cv2/act/Mul_output_0",
+   "shape": "256×10×10",
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "input",
+   "to": "pre",
+   "tensor": null,
+   "shape": null,
+   "synthetic": true,
+   "span": 1,
+   "kind": "main"
+  },
+  {
+   "from": "m23",
+   "to": "output",
+   "tensor": "output0",
+   "shape": null,
+   "synthetic": true,
+   "span": 1,
+   "kind": "main"
+  }
+ ]
+}

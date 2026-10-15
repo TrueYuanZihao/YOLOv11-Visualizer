@@ -3,7 +3,7 @@
         一次前向拿到 23 个中间层激活 + output0 -> 解码检测框 -> 各种可视化 */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  loadLayers, buildLayerIndex, MODEL_URL, ORT_WASM_BASE, SAMPLE_URL,
+  loadLayers, loadGraph, buildLayerIndex, MODEL_URL, ORT_WASM_BASE, SAMPLE_URL,
 } from './model/layers.js';
 import { createSession } from './model/session.js';
 import { letterbox, toNCHW } from './model/preprocess.js';
@@ -18,6 +18,7 @@ import ControlPanel from './components/ControlPanel.jsx';
 import DetectionList from './components/DetectionList.jsx';
 import StatPanel from './components/StatPanel.jsx';
 import Viewport from './components/Viewport.jsx';
+import StructureOverlay from './components/StructureOverlay.jsx';
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -83,6 +84,8 @@ const DEFAULT_VIZ = {
 
 export default function App() {
   const [layers, setLayers] = useState([]);
+  const [graph, setGraph] = useState(null);
+  const [structureOpen, setStructureOpen] = useState(false);
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
   const [error, setError] = useState(null);
@@ -119,6 +122,12 @@ export default function App() {
         if (!alive) return;
         setMeta(data.meta);
         setLayers(data.layers);
+        try {
+          const g = await loadGraph();
+          if (alive) setGraph(g);
+        } catch (gErr) {
+          console.warn('[boot] graph.json 缺失，结构图不可用：', gErr.message);
+        }
         setStatus({ phase: 'model', text: '加载 yolo11n_vis.onnx（10.6 MB）并初始化 wasm 后端 …' });
         const sess = await createSession({
           modelUrl: MODEL_URL(),
@@ -228,10 +237,32 @@ export default function App() {
     return m;
   }, [stats, index]);
 
+  /* 每个节点的上游来源（给左侧列表标注多路输入的 Concat / Detect） */
+  const incoming = useMemo(() => {
+    const m = new Map();
+    if (!graph) return m;
+    for (const e of graph.edges) {
+      if (!m.has(e.to)) m.set(e.to, []);
+      m.get(e.to).push(e.from);
+    }
+    return m;
+  }, [graph]);
+
+
   const layer = index.byId.get(selId) || null;
   const tensor = useMemo(() => tensorOf(layer), [tensorOf, layer]);
   const shape = useMemo(() => (tensor && tensor.dims.length === 4 ? shapeOf(tensor.dims) : null), [tensor]);
   const isDetectLayer = !!(layer && layer.tensor === 'output0');
+
+  /* 结构图右侧的缩略预览：和 3D 切片用的是同一套渲染 */
+  const previewUrl = useMemo(() => {
+    if (!tensor || !shape || shape.C < 1 || shape.H * shape.W < 4) return null;
+    const cv = makeMapCanvas(tensor, shape, {
+      source: viz.stackSource, colormap: viz.colormap, gamma: viz.gamma,
+      rangeMode: viz.rangeMode, channel: viz.channel,
+    });
+    return cv.toDataURL('image/png');
+  }, [tensor, shape, viz.stackSource, viz.colormap, viz.gamma, viz.rangeMode, viz.channel]);
 
   const energy = useMemo(() => {
     if (!tensor || !shape || shape.C < 2 || shape.H * shape.W < 4) return null;
@@ -350,6 +381,7 @@ export default function App() {
           <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>选择图片</button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
           <button type="button" className="btn ghost" onClick={useSample}>示例图</button>
+          <button type="button" className="btn accent" disabled={!graph} onClick={() => setStructureOpen(true)}>网络结构图</button>
           <span className="pill" title="也可以把图片直接拖到页面上">{imageName || '未选择图片'}</span>
         </div>
         <div className="topbar-right">
@@ -363,7 +395,11 @@ export default function App() {
 
       <main className="layout">
         <aside className="col-left">
-          <PipelineList layers={layers} selectedId={selId} onSelect={setSelId} shapes={shapes} stats={stats} rmsMax={rmsMax} />
+          <PipelineList
+            layers={layers} selectedId={selId} onSelect={setSelId}
+            shapes={shapes} stats={stats} rmsMax={rmsMax}
+            incoming={incoming} onOpenGraph={graph ? () => setStructureOpen(true) : null}
+          />
         </aside>
 
         <Viewport
@@ -401,6 +437,21 @@ export default function App() {
           />
         </aside>
       </main>
+
+      {structureOpen && graph ? (
+        <StructureOverlay
+          graph={graph}
+          meta={{ ...graph.meta, ...(meta || {}) }}
+          selectedId={selId}
+          onSelect={setSelId}
+          onClose={() => setStructureOpen(false)}
+          previewUrl={previewUrl}
+          previewSource={viz.stackSource}
+          onPreviewSource={(m) => setViz((v) => ({ ...v, stackSource: m }))}
+          stats={stats}
+          onGoToLayer={() => setStructureOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

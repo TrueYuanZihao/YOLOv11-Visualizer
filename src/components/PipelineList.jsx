@@ -2,7 +2,7 @@
    每项显示层 id、模块名、张量形状，以及一条「激活强度」小条。 */
 import { groupLabel } from '../model/layers.js';
 
-export default function PipelineList({ layers, selectedId, onSelect, shapes, stats, rmsMax, groupLabel: gl }) {
+export default function PipelineList({ layers, selectedId, onSelect, shapes, stats, rmsMax, incoming, onOpenGraph, groupLabel: gl }) {
   const groups = [];
   for (const l of layers) {
     const g = l.group || 'other';
@@ -14,6 +14,11 @@ export default function PipelineList({ layers, selectedId, onSelect, shapes, sta
 
   return (
     <div className="pipeline">
+      {onOpenGraph ? (
+        <button type="button" className="pipe-graphbtn" onClick={onOpenGraph}>
+          查看完整网络结构图（含跨层跳连）
+        </button>
+      ) : null}
       {groups.map((b) => (
         <div className="pipe-group" key={b.g}>
           <div className="pipe-group-title">
@@ -22,6 +27,7 @@ export default function PipelineList({ layers, selectedId, onSelect, shapes, sta
           </div>
           {b.items.map((l) => {
             const st = (stats || {})[l.id];
+            const srcs = (incoming || new Map()).get(l.id);
             const w = st ? Math.min(100, Math.max(6, Math.round(Math.sqrt(st.rms / maxRms) * 100))) : 0;
             return (
               <button
@@ -35,6 +41,11 @@ export default function PipelineList({ layers, selectedId, onSelect, shapes, sta
                 <span className="pipe-body">
                   <span className="pipe-name">{l.block}{l.stride ? ' · s' + l.stride : ''}</span>
                   <span className="pipe-shape">{(shapes || {})[l.id] || '—'}</span>
+                  {srcs && srcs.length > 1 ? (
+                    <span className="pipe-in" title={'多路输入：' + srcs.join(' + ')}>
+                      ← {srcs.join(' + ')}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="pipe-bar"><i style={{ width: w + '%' }} /></span>
               </button>

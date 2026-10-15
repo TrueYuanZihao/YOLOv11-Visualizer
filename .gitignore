@@ -68,6 +68,7 @@ runs/
 # tools/probe.mjs、tools/layers.mjs 生成的截图，以及无头 Edge 的临时 profile
 shots/
 *.err.txt
+build.log
 
 # ---------------------------------------------------------------------------
 # 环境变量与密钥
