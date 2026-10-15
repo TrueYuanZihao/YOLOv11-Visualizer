@@ -17,14 +17,33 @@ function iou(a, b) {
 }
 
 export function decodeDetections(output, opts = {}) {
-  const { conf, iou: iouThr, maxDet, preNmsTop } = { ...DEFAULTS, ...opts };
   const classNames = opts.classNames || null;
   if (!output) return [];
+  const { cands } = decodeCandidates(output, opts);
+  if (!cands.length) return [];
+  const { keep } = nmsTrace(cands, opts);
+  return keep.map((i) => {
+    const a = cands[i];
+    return {
+      ...a,
+      w: a.x2 - a.x1,
+      h: a.y2 - a.y1,
+      className: classNames ? classNames[a.classId] || ('#' + a.classId) : String(a.classId),
+    };
+  });
+}
+
+/** 第一步：把 [1,84,N] 铺回「每格一个预测」。
+    DFL 已经在导出时解码过，所以每格的 4 个数值就是 (cx, cy, w, h)；
+    剩下的 80 个是类别分数（sigmoid 之后）。按分数降序、取前 preNmsTop 个。
+    检测头解剖页面直接复用这一步，保证和界面上显示的框是同一份数据。 */
+export function decodeCandidates(output, opts = {}) {
+  const { conf, preNmsTop } = { ...DEFAULTS, ...opts };
+  if (!output) return { nc: 0, n: 0, cands: [] };
   const { dims, data } = output;
-  if (!dims || dims.length < 3) return [];
-  const ch = dims[1];
+  if (!dims || dims.length < 3) return { nc: 0, n: 0, cands: [] };
   const n = dims[2];
-  const nc = ch - 4;
+  const nc = dims[1] - 4;
 
   const cands = [];
   for (let i = 0; i < n; i++) {
@@ -40,6 +59,8 @@ export function decodeDetections(output, opts = {}) {
     const w = data[2 * n + i];
     const h = data[3 * n + i];
     cands.push({
+      anchor: i,
+      cx, cy, w, h,
       x1: cx - w / 2, y1: cy - h / 2, x2: cx + w / 2, y2: cy + h / 2,
       score: best, classId: bestId,
     });
@@ -47,24 +68,31 @@ export function decodeDetections(output, opts = {}) {
 
   cands.sort((a, b) => b.score - a.score);
   if (cands.length > preNmsTop) cands.length = preNmsTop;
+  return { nc, n, cands };
+}
 
+/** 第二步：逐类 NMS，并记下「谁被谁压掉」。
+    keep 是保留候选在 cands 里的下标；by[j] 是压掉候选项 j 的候选项下标（-1 = 没被压掉）；
+    log 按抑制顺序记录每一步保留了谁、压掉了哪几个 —— 解剖页面的回放就靠它。 */
+export function nmsTrace(cands, opts = {}) {
+  const { iou: iouThr, maxDet } = { ...DEFAULTS, ...opts };
   const keep = [];
   const taken = new Uint8Array(cands.length);
+  const by = new Int32Array(cands.length).fill(-1);
+  const log = [];
+
   for (let i = 0; i < cands.length && keep.length < maxDet; i++) {
     if (taken[i]) continue;
     const a = cands[i];
-    keep.push({
-      ...a,
-      w: a.x2 - a.x1,
-      h: a.y2 - a.y1,
-      className: classNames ? classNames[a.classId] || ('#' + a.classId) : String(a.classId),
-    });
+    const kills = [];
     for (let j = i + 1; j < cands.length; j++) {
       if (taken[j] || cands[j].classId !== a.classId) continue;
-      if (iou(a, cands[j]) > iouThr) taken[j] = 1;
+      if (iou(a, cands[j]) > iouThr) { taken[j] = 1; by[j] = i; kills.push(j); }
     }
+    keep.push(i);
+    log.push({ keep: i, kills });
   }
-  return keep;
+  return { keep, by, log };
 }
 
 /** 统计检测结果的类别分布，给右侧面板用 */

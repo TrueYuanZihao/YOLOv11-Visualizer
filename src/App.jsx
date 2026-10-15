@@ -8,6 +8,7 @@ import {
 import { createSession } from './model/session.js';
 import { letterbox, toNCHW } from './model/preprocess.js';
 import { decodeDetections, classHistogram } from './model/detect.js';
+import { HEAD_INPUTS } from './model/headAnatomy.js';
 import {
   shapeOf, layerStats, channelEnergy, extractChannel, reduceChannels,
   planeRange, normalizePlane, pcaComposite,
@@ -19,6 +20,7 @@ import DetectionList from './components/DetectionList.jsx';
 import StatPanel from './components/StatPanel.jsx';
 import Viewport from './components/Viewport.jsx';
 import StructureOverlay from './components/StructureOverlay.jsx';
+import HeadAnatomy from './components/HeadAnatomy.jsx';
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -86,6 +88,7 @@ export default function App() {
   const [layers, setLayers] = useState([]);
   const [graph, setGraph] = useState(null);
   const [structureOpen, setStructureOpen] = useState(false);
+  const [headOpen, setHeadOpen] = useState(false);
   const [graphMode, setGraphMode] = useState('arch');
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
@@ -270,6 +273,29 @@ export default function App() {
     return channelEnergy(tensor.data, shape.C, shape.H, shape.W);
   }, [tensor, shape]);
 
+  /* 检测头解剖的三路输入：m16 / m19 / m22 的缩略图与形状（颈部交给检测头的特征图） */
+  const headInputs = useMemo(() => {
+    if (!result) return [];
+    return HEAD_INPUTS.map((h) => {
+      const l = index.byId.get(h.id);
+      const t = l ? tensorOf(l) : null;
+      if (!t || t.dims.length !== 4) return null;
+      const s = shapeOf(t.dims);
+      return {
+        id: h.id,
+        scale: h.scale,
+        stride: h.stride,
+        block: l.block,
+        coords: s.C + '×' + s.H + '×' + s.W,
+        count: s.H * s.W,
+        url: makeMapCanvas(t, s, {
+          source: viz.stackSource, colormap: viz.colormap, gamma: viz.gamma,
+          rangeMode: viz.rangeMode, channel: viz.channel,
+        }).toDataURL('image/png'),
+      };
+    }).filter(Boolean);
+  }, [result, index, tensorOf, viz.stackSource, viz.colormap, viz.gamma, viz.rangeMode, viz.channel]);
+
   useEffect(() => {
     if (shape && viz.channel > shape.C - 1) setViz((v) => ({ ...v, channel: 0 }));
   }, [shape, viz.channel]);
@@ -382,6 +408,7 @@ export default function App() {
           <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>选择图片</button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
           <button type="button" className="btn ghost" onClick={useSample}>示例图</button>
+          <button type="button" className="btn accent" disabled={!result} onClick={() => setHeadOpen(true)}>检测头解剖</button>
           <button type="button" className="btn accent" disabled={!graph} onClick={() => setStructureOpen(true)}>网络结构图</button>
           <span className="pill" title="也可以把图片直接拖到页面上">{imageName || '未选择图片'}</span>
         </div>
@@ -414,6 +441,7 @@ export default function App() {
           stackItems={stackItems} stackProgress={stackProgress} stackMode={stackMode}
           onSelect={setSelId} resetSignal={resetSignal}
           isDetectLayer={isDetectLayer}
+          onOpenHead={result ? () => setHeadOpen(true) : null}
           version={result ? result.id : 0}
         />
 
@@ -438,6 +466,24 @@ export default function App() {
           />
         </aside>
       </main>
+
+      {headOpen && result && result.map.output0 ? (
+        <HeadAnatomy
+          output={result.map.output0}
+          meta={meta || {}}
+          imgsz={imgsz}
+          inputCanvas={pre ? pre.inputCanvas : null}
+          headInputs={headInputs}
+          dets={dets}
+          conf={viz.conf}
+          iou={viz.iou}
+          onConf={(v) => setViz((s) => ({ ...s, conf: v }))}
+          onIou={(v) => setViz((s) => ({ ...s, iou: v }))}
+          viz={viz}
+          onClose={() => setHeadOpen(false)}
+          onGoToHead={() => { setHeadOpen(false); setSelId('m23'); }}
+        />
+      ) : null}
 
       {structureOpen && graph ? (
         <StructureOverlay

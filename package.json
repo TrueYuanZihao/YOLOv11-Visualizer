@@ -15,7 +15,8 @@
     "export:graph": ".venv312\\Scripts\\python.exe tools\\export_graph.py",
     "probe": "node tools/probe.mjs http://localhost:5173/ shots",
     "probe:layers": "node tools/layers.mjs http://localhost:5173/ shots",
-    "probe:structure": "node tools/probe-structure.mjs http://localhost:5173/ shots"
+    "probe:structure": "node tools/probe-structure.mjs http://localhost:5173/ shots",
+    "probe:head": "node tools/probe-head.mjs http://localhost:5173/ shots"
   },
   "dependencies": {
     "onnxruntime-web": "^1.30.0",

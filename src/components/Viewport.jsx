@@ -14,7 +14,7 @@ export default function Viewport(props) {
   const {
     view, setView, layer, tensor, shape, inputTensor, inputCanvas, dets, imgsz,
     viz, setViz, energy, stackItems, stackProgress, stackMode, onSelect,
-    resetSignal, isDetectLayer, version,
+    resetSignal, isDetectLayer, onOpenHead, version,
   } = props;
 
   const shownTensor = isDetectLayer ? inputTensor : tensor;
@@ -44,8 +44,13 @@ export default function Viewport(props) {
       <div className="viewport-body">
         {isDetectLayer ? (
           <div className="banner">
-            这一层是检测头输出，张量形状为 [1, 84, N]（4 个框坐标 + 80 类分数），并不是图像网格。
-            因此这里显示 letterbox 后的输入图 + 真实检测框；上方「检测结果」面板里是所有检出目标。
+            <span>
+              这一层是检测头输出，张量形状为 [1, 84, N]（4 个框坐标 + 80 类分数），并不是图像网格。
+              因此这里显示 letterbox 后的输入图 + 真实检测框；上方「检测结果」面板里是所有检出目标。
+            </span>
+            {onOpenHead ? (
+              <button type="button" className="btn accent banner-cta" onClick={onOpenHead}>检测头解剖</button>
+            ) : null}
           </div>
         ) : null}
 
