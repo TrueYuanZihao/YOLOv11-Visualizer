@@ -4,25 +4,31 @@
    - 跨层跳连自动用虚线 + 不同颜色标出（rank 跨度 > 1） */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  buildLayout, edgePath, ancestorsOf, descendantsOf,
-  GROUP_COLOR, ROW_LABELS, levelTag,
+  buildLayout, buildArchLayout, edgePath, archEdgePath, ancestorsOf, descendantsOf,
+  GROUP_COLOR, ROW_LABELS, levelTag, blockColor, BLOCK_COLOR,
 } from '../state/graphLayout.js';
 
 const MIN_K = 0.18;
 const MAX_K = 3;
 
-export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
+export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode = 'arch' }) {
   const hostRef = useRef(null);
   const dragRef = useRef(null);
   const fittedRef = useRef(false);
 
-  const layout = useMemo(() => buildLayout(graph, layoutKey), [graph, layoutKey]);
+  const layout = useMemo(
+    () => (mode === 'arch' ? buildArchLayout(graph) : buildLayout(graph, layoutKey)),
+    [graph, layoutKey, mode],
+  );
   const [offsets, setOffsets] = useState({});
   const [view, setView] = useState({ x: 0, y: 0, k: 0.75 });
   const [hoverId, setHoverId] = useState(null);
   const [size, setSize] = useState({ w: 1000, h: 700 });
 
-  useEffect(() => { setOffsets({}); }, [layout]);
+  useEffect(() => {
+    fittedRef.current = false;
+    setOffsets({});
+  }, [layout, mode]);
 
   const nodes = useMemo(() => layout.nodes.map((n) => {
     const o = offsets[n.id];
@@ -33,7 +39,8 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
   const edges = useMemo(() => layout.edges.map((e) => {
     const a = byId.get(e.from);
     const b = byId.get(e.to);
-    return { ...e, a, b, geo: edgePath(a, b) };
+    const route = layout.arch ? archEdgePath : edgePath;
+    return { ...e, a, b, geo: route(a, b), len: Math.hypot(b.x - a.x, b.y - a.y) };
   }), [layout, byId]);
 
   const hot = useMemo(
@@ -163,7 +170,30 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
 
         <g transform={'translate(' + view.x + ',' + view.y + ') scale(' + view.k + ')'}>
           {/* 行背景带 */}
-          {ROW_LABELS.slice(0, layout.rowCount).map((label, r) => (
+          {layout.arch ? (
+            <g className="gv-archbg">
+              {layout.bands.map((b) => (
+                <g key={'band' + b.key}>
+                  <rect
+                    className="gv-bandrect"
+                    x={layout.gutter - 96} y={b.y}
+                    width={layout.width - 34} height={b.h} rx={9}
+                    fill={b.strong ? 'rgba(78,163,255,0.055)' : 'rgba(126,146,182,0.032)'}
+                  />
+                  <text className="gv-bandlabel" x={layout.gutter - 24} y={b.y + b.h / 2 - 8} textAnchor="end">{b.label}</text>
+                  <text className="gv-bandtag" x={layout.gutter - 24} y={b.y + b.h / 2 + 7} textAnchor="end">{b.tag}</text>
+                  <text className="gv-bandtag" x={layout.gutter - 24} y={b.y + b.h / 2 + 21} textAnchor="end">{b.res}</text>
+                </g>
+              ))}
+              {layout.lanes.map((l) => (
+                <g key={'lane' + l.key} className="gv-lane">
+                  <rect x={l.x} y={l.y} width={l.w} height={l.h} rx={12} />
+                  <text className="gv-lanetitle" x={l.x + l.w / 2} y={l.y - 26} textAnchor="middle">{l.label}</text>
+                  <text className="gv-lanesub" x={l.x + l.w / 2} y={l.y - 11} textAnchor="middle">{l.sub}</text>
+                </g>
+              ))}
+            </g>
+          ) : ROW_LABELS.slice(0, layout.rowCount).map((label, r) => (
             <g key={'row' + r}>
               <rect
                 x={0} y={layout.rowY[r] - 36}
@@ -185,7 +215,7 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
             return (
               <g key={e.key} className={cls}>
                 <path d={e.geo.d} markerEnd={isHot || isFocus ? 'url(#gv-arrow-hot)' : 'url(#gv-arrow)'} />
-                {(e.kind === 'skip' || (detail && isFocus)) && e.shape ? (
+                {(e.kind === 'skip' || (detail && isFocus && e.len > 150)) && e.shape ? (
                   <g className="gv-elabel" transform={'translate(' + e.geo.mid[0] + ',' + e.geo.mid[1] + ')'}>
                     <rect x={-38} y={-9} width={76} height={17} rx={5} />
                     <text x={0} y={3} textAnchor="middle">{e.shape}</text>
@@ -197,7 +227,9 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
 
           {/* 节点 */}
           {nodes.map((n) => {
-            const color = GROUP_COLOR[n.group] || '#8ea0bd';
+            const color = layout.arch
+              ? (n.color || blockColor(n.block))
+              : (GROUP_COLOR[n.group] || '#8ea0bd');
             const isSel = n.id === selectedId;
             const isHotNode = !!(hot && hot.nodes.has(n.id));
             const cls = 'gv-node' + (isSel ? ' is-selected' : '')
@@ -210,6 +242,7 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
                 data-node-id={n.id}
                 className={cls}
                 transform={'translate(' + n.x + ',' + n.y + ')'}
+                style={layout.arch ? { '--nc': color, '--nc-soft': color + '1f' } : undefined}
                 onPointerEnter={() => setHoverId(n.id)}
                 onPointerLeave={() => setHoverId((h) => (h === n.id ? null : h))}
               >
@@ -236,12 +269,25 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey }) {
       </div>
 
       <div className="graph-legend">
-        <span><i style={{ background: GROUP_COLOR.backbone }} />骨干</span>
-        <span><i style={{ background: GROUP_COLOR.neck }} />颈部</span>
-        <span><i style={{ background: GROUP_COLOR.head }} />检测头</span>
-        <span className="sep" />
-        <span><i className="line" />顺序连接</span>
-        <span><i className="line dash" />跨层跳连</span>
+        {layout.arch ? (
+          <>
+            {['Conv', 'C3k2', 'SPPF', 'Upsample', 'Concat', 'Detect'].map((b) => (
+              <span key={b}><i style={{ background: BLOCK_COLOR[b] }} />{b}</span>
+            ))}
+            <span className="sep" />
+            <span><i className="line" />顺序连接</span>
+            <span><i className="line dash" />跨层跳连</span>
+          </>
+        ) : (
+          <>
+            <span><i style={{ background: GROUP_COLOR.backbone }} />骨干</span>
+            <span><i style={{ background: GROUP_COLOR.neck }} />颈部</span>
+            <span><i style={{ background: GROUP_COLOR.head }} />检测头</span>
+            <span className="sep" />
+            <span><i className="line" />顺序连接</span>
+            <span><i className="line dash" />跨层跳连</span>
+          </>
+        )}
       </div>
 
       {focusNode ? (

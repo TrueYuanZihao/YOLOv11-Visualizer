@@ -86,6 +86,7 @@ export default function App() {
   const [layers, setLayers] = useState([]);
   const [graph, setGraph] = useState(null);
   const [structureOpen, setStructureOpen] = useState(false);
+  const [graphMode, setGraphMode] = useState('arch');
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
   const [error, setError] = useState(null);
@@ -450,6 +451,8 @@ export default function App() {
           onPreviewSource={(m) => setViz((v) => ({ ...v, stackSource: m }))}
           stats={stats}
           onGoToLayer={() => setStructureOpen(false)}
+          graphMode={graphMode}
+          onGraphMode={setGraphMode}
         />
       ) : null}
     </div>

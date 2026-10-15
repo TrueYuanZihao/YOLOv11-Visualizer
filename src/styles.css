@@ -326,7 +326,7 @@ button, input, select { font: inherit; color: inherit; }
 .gv-rowlabel { fill: #56688c; font: 600 13px system-ui, sans-serif; letter-spacing: .1em; }
 
 .gv-node { cursor: pointer; }
-.gv-node .gv-box { fill: #101a2a; stroke: #2b3c58; stroke-width: 1.2; }
+.gv-node .gv-box { fill: var(--nc-soft, #101a2a); stroke: var(--nc, #2b3c58); stroke-width: 1.2; }
 .gv-node.is-hot .gv-box { stroke: #3a6ba6; }
 .gv-node.is-selected .gv-box { fill: #13294a; stroke: #4ea3ff; stroke-width: 2.2; }
 .gv-node.is-dim { opacity: .32; }
@@ -374,3 +374,14 @@ button, input, select { font: inherit; color: inherit; }
 .graph-tip span { font: 10.5px var(--mono); color: var(--muted); }
 .graph-tip p { margin: 5px 0 0; font-size: 11.5px; line-height: 1.45; color: #b9c8de; }
 .graph-tip em { display: block; margin-top: 4px; font-style: normal; font-size: 11px; color: var(--warn); font-family: var(--mono); }
+/* ---------- 架构图：尺度带 + 阶段列 ---------- */
+.gv-bandrect { stroke: rgba(120, 142, 178, .13); stroke-width: 1; }
+.gv-bandlabel { fill: #8fa6c9; font: 700 13px var(--mono); letter-spacing: .04em; }
+.gv-bandtag { fill: #56688c; font: 10px var(--mono); }
+.gv-lane rect { fill: none; stroke: rgba(120, 142, 178, .20); stroke-width: 1; }
+.gv-lanetitle { fill: #cfe0f7; font: 600 12.5px system-ui, sans-serif; letter-spacing: .05em; }
+.gv-lanesub { fill: #5d7194; font: 10.5px system-ui, sans-serif; }
+.gv-node .gv-accent { opacity: .95; }
+.graph-legend { flex-wrap: wrap; max-width: 62%; justify-content: flex-end; }
+.so-modes { display: flex; align-items: center; gap: 4px; margin-right: 10px; }
+.so-modes .so-segbtn { padding: 0 10px; height: 26px; }

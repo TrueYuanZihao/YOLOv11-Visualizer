@@ -36,6 +36,10 @@ const stats = await page.evaluate(() => ({
   edges: document.querySelectorAll('.gv-edge').length,
   skipEdges: document.querySelectorAll('.gv-edge.is-skip').length,
   rowLabels: [...document.querySelectorAll('.gv-rowlabel')].map((t) => t.textContent),
+  lanes: [...document.querySelectorAll('.gv-lanetitle')].map((t) => t.textContent),
+  bands: [...document.querySelectorAll('.gv-bandlabel')].map((t) => t.textContent),
+  modeOn: document.querySelector('.so-modes .so-segbtn.is-on')
+    ? document.querySelector('.so-modes .so-segbtn.is-on').textContent : null,
   skips: [...document.querySelectorAll('.so-skip')].map((t) => t.textContent.replace(/\s+/g, ' ').trim()),
   detailTitle: document.querySelector('.so-node-head') ? document.querySelector('.so-node-head').textContent.replace(/\s+/g, ' ').trim() : null,
   hasPreview: !!document.querySelector('.so-preview img'),
@@ -43,6 +47,40 @@ const stats = await page.evaluate(() => ({
 }));
 console.log('结构图:', JSON.stringify(stats, null, 1));
 await page.screenshot({ path: outDir + '/structure-open.png' });
+
+// 架构图：跳连应当接近水平（跨越阶段列，而不是上下乱窜）
+const geo = await page.evaluate(() => {
+  const c = (id) => {
+    const g = document.querySelector('[data-node-id="' + id + '"]');
+    if (!g) return null;
+    const r = g.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  };
+  return [['m6', 'm12'], ['m4', 'm15'], ['m13', 'm18'], ['m10', 'm21'], ['m16', 'm23']].map(([a, b]) => {
+    const A = c(a); const B = c(b);
+    return { pair: a + '->' + b, dx: A && B ? B.x - A.x : null, dy: A && B ? B.y - A.y : null };
+  });
+});
+console.log('架构图跳连几何:', JSON.stringify(geo));
+
+// 布局切换：架构图 <-> 依赖图
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.so-modes .so-segbtn')].find((x) => x.textContent.trim() === '依赖图');
+  if (b) b.click();
+});
+await new Promise((r) => setTimeout(r, 1200));
+const rankMode = await page.evaluate(() => ({
+  rowLabels: [...document.querySelectorAll('.gv-rowlabel')].map((t) => t.textContent),
+  lanes: document.querySelectorAll('.gv-lanetitle').length,
+  nodes: document.querySelectorAll('.gv-node').length,
+}));
+console.log('切到依赖图:', JSON.stringify(rankMode));
+await page.screenshot({ path: outDir + '/structure-rank.png' });
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.so-modes .so-segbtn')].find((x) => x.textContent.trim() === '架构图');
+  if (b) b.click();
+});
+await new Promise((r) => setTimeout(r, 900));
 
 // 点击 m12（颈部 Concat，两路输入）
 const clicked = await page.evaluate(() => {
@@ -69,13 +107,13 @@ await page.screenshot({ path: outDir + '/structure-m12.png' });
 const srcs = {};
 for (const [label, key] of [['PCA', 'pca'], ['单通道', 'channel'], ['均值', 'mean']]) {
   await page.evaluate((lb) => {
-    const b = [...document.querySelectorAll('.so-segbtn')].find((x) => x.textContent.trim() === lb);
+    const b = [...document.querySelectorAll('.so-seg .so-segbtn')].find((x) => x.textContent.trim() === lb);
     if (b) b.click();
   }, label);
   await new Promise((r) => setTimeout(r, 800));
   srcs[key] = await page.evaluate(() => {
     const i = document.querySelector('.so-preview img');
-    const on = document.querySelector('.so-segbtn.is-on');
+    const on = document.querySelector('.so-seg .so-segbtn.is-on');
     return { src: i ? i.src : '', on: on ? on.textContent.trim() : null };
   });
 }
@@ -85,7 +123,7 @@ console.log('预览源切换:', JSON.stringify({
   active: Object.fromEntries(Object.entries(srcs).map(([k, v]) => [k, v.on])),
 }));
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.so-segbtn')].find((x) => x.textContent.trim() === 'PCA');
+  const b = [...document.querySelectorAll('.so-seg .so-segbtn')].find((x) => x.textContent.trim() === 'PCA');
   if (b) b.click();
 });
 await new Promise((r) => setTimeout(r, 600));

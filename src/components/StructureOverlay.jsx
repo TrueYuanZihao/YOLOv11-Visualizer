@@ -13,7 +13,7 @@ function fmt(v) {
 
 export default function StructureOverlay({
   graph, meta, selectedId, onSelect, onClose, previewUrl, stats, onGoToLayer,
-  previewSource, onPreviewSource,
+  previewSource, onPreviewSource, graphMode, onGraphMode,
 }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -57,13 +57,23 @@ export default function StructureOverlay({
           <span className="pill ok">连边由 ONNX 计算图自动提取</span>
         </div>
         <div className="so-head-right">
+          <div className="so-modes">
+            {[['arch', '架构图'], ['rank', '依赖图']].map(([v, label]) => (
+              <button
+                type="button" key={v}
+                className={'so-segbtn' + (graphMode === v ? ' is-on' : '')}
+                onClick={() => onGraphMode(v)}
+                title={v === 'arch' ? '按分辨率分行、按处理阶段分列，颈部画成真实的 U 形' : '按最长路径深度排成三行'}
+              >{label}</button>
+            ))}
+          </div>
           <span className="so-hint">拖背景平移 · 滚轮缩放 · 拖节点摆位 · 点节点选中</span>
           <button type="button" className="btn" onClick={onClose}>关闭 (Esc)</button>
         </div>
       </header>
 
       <div className="so-body">
-        <GraphView graph={graph} selectedId={selectedId} onSelect={onSelect} />
+        <GraphView graph={graph} selectedId={selectedId} onSelect={onSelect} mode={graphMode} />
 
         <aside className="so-detail">
           {!node ? <p className="panel-desc">点击图中任意节点查看该层的输入来源、统计与说明。</p> : null}

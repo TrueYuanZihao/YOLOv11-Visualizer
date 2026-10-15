@@ -32,6 +32,7 @@ npm run export:graph # 解析 ONNX 计算图，生成网络拓扑 public/models/
 | `public/models/yolo11n_vis.onnx` | 10 MB，跑起来必需，已入库 |
 | `public/models/layers.json` `public/samples/street.jpg` | 层清单与示例图 |
 | `public/models/graph.json` | 约 10 KB，网络拓扑（节点 + 连边），结构图必需 |
+| `YOLOv11 架构.svg` | 283 KB，架构图的排布参考图（仅作文档，运行时不加载） |
 | `ultralytics-main/ultralytics/yolo11n.pt` | 5.4 MB，只为「重新导出 ONNX」保留 |
 
 不入库（`.gitignore` 已排除，都能一条命令再生）：
@@ -86,6 +87,7 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
   - `通道网格`：按能量排序的前 12 个通道小图矩阵，一眼看出特征分化。
   - `3D 特征金字塔`：每一层的特征图作为一块切片，沿深度斜向堆成一摞，点击切片切换选中层。
   - `3D 通道堆叠`：把选中层能量最高的若干通道叠成多层「地形图」，**激活值直接做高度位移**，可调起伏幅度。
+- **整屏 网络结构图**：`架构图`（默认，纵向按分辨率、横向按处理阶段，颈部是 U 形）/ `依赖图`（横排紧凑版）两种排布，见下一节。
 - **右侧 控制面板**：配色（viridis/inferno/turbo/ice/灰度/冷暖）、伽马、显示区间（百分位/minmax）、通道、堆叠间距、通道数量、置信度阈值与 NMS IoU。
 - **右侧 统计面板**：选中层的均值/标准差/极值/RMS/正值占比，以及通道能量排行。
 
@@ -97,7 +99,8 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
 | 检测框、类别、置信度 | **真实** NMS 解码结果 |
 | PCA / 通道能量 / 高斯起伏 | 对真实张量的后处理 |
 | 层的语义说明（`layers.json` 的 `desc`） | 人工撰写，属解释性文字 |
-| 结构图的节点与连边（含 6 条跨层跳连） | **真实** ONNX 计算图自动提取，非人工绘制 |
+| 结构图的连边（含 6 条跨层跳连） | **真实** ONNX 计算图自动提取，非人工绘制 |
+| 结构图里节点落在哪一行哪一列 | 按 YOLO11 的模块语义手工归档（`ARCH_SLOTS`），属人工排布 |
 
 ---
 
@@ -106,7 +109,7 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
 左上角 **网络结构图** 按钮打开整屏的结构视图。它不是按 `layers.json` 顺序画的一条线，
 而是 `tools/export_graph.py` 解析 `yolo11n_vis.onnx` 的 **581 个算子**、按 `/model.<N>/` 前缀
 归并成 24 个模块，再统计每个模块真正吃进的外来张量，由此得到 **32 条连边**，其中
-**6 条是跨层跳连**：
+**6 条是跨层跳连**（排布参考了 `YOLOv11 架构.svg`，但节点与连边以 ONNX 为准）：
 
 | 跳连 | 跨度 | 张量 | 含义 |
 | --- | --- | --- | --- |
@@ -117,9 +120,28 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
 | m16 → m23 | 跨 7 层 | 64×40×40 | P3 特征直送 Detect |
 | m19 → m23 | 跨 4 层 | 128×20×20 | P4 特征直送 Detect |
 
+### 两种排布
+
+右上角切换（默认 **架构图**）：
+
+- **架构图** —— 与你给的 `YOLOv11 架构.svg` 同构：**纵向是分辨率，横向是处理阶段**。
+  - 最左 `骨干 Backbone`：input / pre / m0…m10 一路向下，stride 逐级翻倍，左侧标出 P1/2 → P5/32 的尺度带。
+  - 中间两列是颈部，按**真实方向**画成 U 形：`自顶向下 (FPN)` 由下往上（m11 Upsample → m16），
+    `自底向上 (PAN)` 由上往下（m17 Conv s2 → m22 C3k2）。
+  - 最右 `检测头 Head`：m23 Detect 同时接 P3 / P4 / P5 三路，再输出 decoded 张量。
+  - 按算子类型上色（Conv 蓝 / C3k2 橙 / Concat 绿 / Upsample 粉 / SPPF 紫 / Detect 黄）。
+  - **6 条跳连因此变成横线**：`m6→m12`、`m4→m15` 与骨干同高，是笔直的一横，
+    一眼就能看出颈部 Concat 到底融了骨干哪一层的特征。
+- **依赖图** —— 原来的紧凑排布：按最长路径深度横排、backbone / neck / head 分三行，适合快速纵览顺序。
+
+校对方式：`ARCH_SLOTS` 把 26 个阶段手工归档到 4 列 × 6 条尺度带，
+但连边仍全部来自 `graph.json`，两边可以逐条对上；
+`npm run probe:structure` 会断言 `m6→m12`、`m4→m15` 在屏幕上确实画成了横线（`dy = 0`）。
+
 交互方式：
 
 - 滚轮缩放、拖背景平移、**拖节点自由摆位**（只改排布，不动数据）。
+- 右上角 `架构图 / 依赖图` 切换排布，切换后自动重新适配窗口。
 - 点节点 = 选中该层：图上蓝色高亮它的全部上游依赖、绿色高亮下游流向，其余压暗。
 - 右侧详情给出张量形状、数值统计、可点击的「输入来自 / 输出流向」列表，以及 6 条跳连清单一键跳转。
 - 「回中间查看这一层的数据」关掉浮层，中间视图就停在刚选的那层上，左侧列表同步选中。
@@ -137,7 +159,7 @@ index.html              入口
 src/
   App.jsx               状态编排：加载模型 → 预处理 → 前向 → 分发可视化
   state/
-    graphLayout.js      拓扑 → 二维布局（分带 / 分层 / 贝塞尔连边）
+    graphLayout.js      拓扑 → 二维布局（架构图分列分带 / 依赖图分行 + 贝塞尔连边）
   model/
     runner.js           ORT 执行器（Worker / 主线程共用）
     ortWorker.js        Web Worker 外壳
@@ -153,7 +175,10 @@ src/
     ChannelGrid.jsx     通道网格
     VolStack.jsx        Three.js 3D 堆叠（金字塔 / 通道地形）
     GraphView.jsx       SVG 网络结构图（缩放 / 平移 / 拖节点 / 高亮依赖路径）
-  components/           流水线、控制面板、检测结果、统计面板、结构图浮层
+  components/
+    PipelineList.jsx    左侧流水线（带多路输入来路提示）
+    StructureOverlay.jsx 整屏结构图浮层（排布切换 + 节点详情）
+    ……                  控制面板、检测结果、统计面板
 public/
   models/               yolo11n_vis.onnx + layers.json
   ort/                  onnxruntime-web 运行时（postinstall 自动同步）
@@ -165,7 +190,7 @@ tools/
   sync-ort.mjs          同步 wasm 运行时
   probe.mjs             用 Edge 做端到端验证（控制台日志 + 四个视图截图）
   layers.mjs            逐层冒烟测试（input / pre / m0 / m12 / m22 / output）
-  probe-structure.mjs   结构图冒烟测试（节点 / 连边 / 跳连 / 拖动 / 预览源切换）
+  probe-structure.mjs   结构图冒烟测试（节点 / 连边 / 跳连几何 / 排布切换 / 拖动 / 预览源切换）
 legacy/                 第一版「示意内核」可视化，保留作对照
 ```
 
@@ -179,3 +204,6 @@ legacy/                 第一版「示意内核」可视化，保留作对照
 - `public/ort` 下的 wasm 从本地加载（CDN 不可达），构建产物因此偏大，属预期行为。
 - 结构图的模块划分依赖导出时张量名的 `/model.<N>/` 前缀；若改用别的方式导出 ONNX，需要重跑 `npm run export:graph` 校对。
 - 结构图里 `rank`（深度层级）由最长路径松弛算出，仅用于排序与标注，不代表计算依赖的先后约束。
+- 架构图的「哪个节点落在第几列第几行」是人工归档在 `ARCH_SLOTS` 里的（依据 YOLO11 的模块语义），
+  连边则完全来自 ONNX。若换一份骨干/颈部结构，需要同步改这张表；表里的 26 个阶段会被逐一放到画布上，
+  缺一个就会在图上少一块。
