@@ -14,6 +14,7 @@ function fmt(v) {
 export default function StructureOverlay({
   graph, meta, selectedId, onSelect, onClose, previewUrl, stats, onGoToLayer,
   previewSource, onPreviewSource, graphMode, onGraphMode,
+  onDissect,
 }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -126,6 +127,13 @@ export default function StructureOverlay({
                 ))}
               </div>
 
+              {onDissect && ins.some((e) => e.kind === 'skip') ? (
+                <button
+                  type="button" className="btn"
+                  onClick={() => { const s = ins.find((e) => e.kind === 'skip'); onDissect(s.from, s.to); }}
+                >拆解这条跳连搬过来的通道</button>
+              ) : null}
+
               <div className="so-links">
                 <div className="so-links-title">输出流向（点击跳转）</div>
                 {outs.length === 0 ? <span className="muted">无（网络终点）</span> : null}
@@ -152,14 +160,23 @@ export default function StructureOverlay({
               正是 FPN/PAN 的结构。
             </p>
             {skips.map((e) => (
-              <button type="button" key={e.from + '->' + e.to} className="so-skip" onClick={() => onSelect(e.to)}>
-                <b>{e.from}</b>
-                <span>{byId.get(e.from) ? byId.get(e.from).shape : ''}</span>
-                <i>→</i>
-                <b>{e.to}</b>
-                <span>{byId.get(e.to) ? byId.get(e.to).block : ''}</span>
-                <em>跨 {e.span} 层</em>
-              </button>
+              <div className="so-skiprow" key={e.from + '->' + e.to}>
+                <button type="button" className="so-skip" onClick={() => onSelect(e.to)}>
+                  <b>{e.from}</b>
+                  <span>{byId.get(e.from) ? byId.get(e.from).shape : ''}</span>
+                  <i>→</i>
+                  <b>{e.to}</b>
+                  <span>{byId.get(e.to) ? byId.get(e.to).block : ''}</span>
+                  <em>跨 {e.span} 层</em>
+                </button>
+                {onDissect ? (
+                  <button
+                    type="button" className="so-skip-dissect"
+                    onClick={() => onDissect(e.from, e.to)}
+                    title="拆开看这条跳连搬过来的通道"
+                  >拆解</button>
+                ) : null}
+              </div>
             ))}
           </div>
         </aside>

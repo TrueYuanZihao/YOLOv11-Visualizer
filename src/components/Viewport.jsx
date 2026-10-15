@@ -15,6 +15,7 @@ export default function Viewport(props) {
     view, setView, layer, tensor, shape, inputTensor, inputCanvas, dets, imgsz,
     viz, setViz, energy, stackItems, stackProgress, stackMode, onSelect,
     resetSignal, isDetectLayer, onOpenHead, version,
+    onOpenRelation, concatInfo,
   } = props;
 
   const shownTensor = isDetectLayer ? inputTensor : tensor;
@@ -50,6 +51,20 @@ export default function Viewport(props) {
             </span>
             {onOpenHead ? (
               <button type="button" className="btn accent banner-cta" onClick={onOpenHead}>检测头解剖</button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {concatInfo ? (
+          <div className="banner concat">
+            <span>
+              这一层是通道拼接：{concatInfo.segments.map((s) => s.from + ' ' + s.channels).join(' + ')}
+              {' = '}{concatInfo.total} 通道。
+              {concatInfo.segments.filter((s) => s.skip).map((s) => '其中 ' + s.from + ' 是跨层跳连搬过来的（' + s.channels + ' 通道）。').join('')}
+              通道顺序就是 ONNX 算子的输入顺序，可以在「层间关系」里拆开验证。
+            </span>
+            {onOpenRelation ? (
+              <button type="button" className="btn accent banner-cta" onClick={onOpenRelation}>拆开看</button>
             ) : null}
           </div>
         ) : null}

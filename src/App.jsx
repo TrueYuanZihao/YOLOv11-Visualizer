@@ -21,6 +21,8 @@ import StatPanel from './components/StatPanel.jsx';
 import Viewport from './components/Viewport.jsx';
 import StructureOverlay from './components/StructureOverlay.jsx';
 import HeadAnatomy from './components/HeadAnatomy.jsx';
+import LayerRelations from './components/LayerRelations.jsx';
+import { concatBreakdown } from './model/relations.js';
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -89,6 +91,8 @@ export default function App() {
   const [graph, setGraph] = useState(null);
   const [structureOpen, setStructureOpen] = useState(false);
   const [headOpen, setHeadOpen] = useState(false);
+  const [relOpen, setRelOpen] = useState(false);
+  const [relSeed, setRelSeed] = useState(null);
   const [graphMode, setGraphMode] = useState('arch');
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
@@ -113,6 +117,12 @@ export default function App() {
 
   const index = useMemo(() => buildLayerIndex(layers), [layers]);
   indexRef.current = index;
+
+  /* 层间关系浮层：seed 决定打开时停在 A/B 还是某条跳连上 */
+  const openRelations = useCallback((seed) => {
+    setRelSeed(seed || null);
+    setRelOpen(true);
+  }, []);
 
   const imgsz = meta ? meta.imgsz : 320;
 
@@ -257,6 +267,20 @@ export default function App() {
   const tensor = useMemo(() => tensorOf(layer), [tensorOf, layer]);
   const shape = useMemo(() => (tensor && tensor.dims.length === 4 ? shapeOf(tensor.dims) : null), [tensor]);
   const isDetectLayer = !!(layer && layer.tensor === 'output0');
+
+  /* 中间视口里的入口：选中层若是「多路输入按通道拼接」，就给一条通往层间关系的横幅 */
+  const relationCta = useMemo(() => {
+    if (!result || !graph || !layer) return null;
+    const bd = concatBreakdown(graph, layer.id);
+    if (!bd.ok) return null;
+    const skip = bd.segments.find((s) => s.skip) || null;
+    return {
+      info: bd,
+      open: () => openRelations(skip
+        ? { mode: 'skip', edge: skip.from + '->' + layer.id }
+        : { mode: 'ab', pair: { a: bd.segments[0].from, b: layer.id } }),
+    };
+  }, [result, graph, layer, openRelations]);
 
   /* 结构图右侧的缩略预览：和 3D 切片用的是同一套渲染 */
   const previewUrl = useMemo(() => {
@@ -409,6 +433,7 @@ export default function App() {
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
           <button type="button" className="btn ghost" onClick={useSample}>示例图</button>
           <button type="button" className="btn accent" disabled={!result} onClick={() => setHeadOpen(true)}>检测头解剖</button>
+          <button type="button" className="btn accent" disabled={!result || !graph} onClick={() => openRelations(null)}>层间关系</button>
           <button type="button" className="btn accent" disabled={!graph} onClick={() => setStructureOpen(true)}>网络结构图</button>
           <span className="pill" title="也可以把图片直接拖到页面上">{imageName || '未选择图片'}</span>
         </div>
@@ -442,6 +467,8 @@ export default function App() {
           onSelect={setSelId} resetSignal={resetSignal}
           isDetectLayer={isDetectLayer}
           onOpenHead={result ? () => setHeadOpen(true) : null}
+          onOpenRelation={relationCta ? relationCta.open : null}
+          concatInfo={relationCta ? relationCta.info : null}
           version={result ? result.id : 0}
         />
 
@@ -499,6 +526,26 @@ export default function App() {
           onGoToLayer={() => setStructureOpen(false)}
           graphMode={graphMode}
           onGraphMode={setGraphMode}
+          onDissect={(from, to) => {
+            setStructureOpen(false);
+            openRelations({ mode: 'skip', edge: from + '->' + to });
+          }}
+        />
+      ) : null}
+
+      {relOpen && result && graph ? (
+        <LayerRelations
+          graph={graph}
+          layers={layers}
+          imgsz={imgsz}
+          inputCanvas={pre ? pre.inputCanvas : null}
+          version={result.id}
+          byId={index.byId}
+          tensorOf={tensorOf}
+          seed={relSeed}
+          onClose={() => setRelOpen(false)}
+          onGoToLayer={(id) => { setRelOpen(false); if (id) setSelId(id); }}
+          onOpenHead={result.map.output0 ? () => { setRelOpen(false); setHeadOpen(true); } : null}
         />
       ) : null}
     </div>
