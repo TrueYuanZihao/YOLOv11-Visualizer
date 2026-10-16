@@ -124,6 +124,83 @@ export default function App() {
     setRelOpen(true);
   }, []);
 
+  /* ---------- 前向回放：沿 layers 的顺序从 input 走到 output ---------- */
+  const stageIds = useMemo(() => layers.map((l) => l.id), [layers]);
+  const stageIndex = Math.max(0, stageIds.indexOf(selId));
+  const [replay, setReplay] = useState({ playing: false, speed: 1, touched: false });
+  const selIdRef = useRef(selId);
+  selIdRef.current = selId;
+  const stageIdsRef = useRef(stageIds);
+  stageIdsRef.current = stageIds;
+
+  /* 自动播放：每 delay 毫秒推进一层；手动点别处也能接管（内部读的是当前选中层） */
+  useEffect(() => {
+    if (!replay.playing) return undefined;
+    const delay = Math.round(900 / replay.speed);
+    const timer = setInterval(() => {
+      const ids = stageIdsRef.current;
+      const i = ids.indexOf(selIdRef.current);
+      if (i >= 0 && i < ids.length - 1) setSelId(ids[i + 1]);
+    }, delay);
+    return () => clearInterval(timer);
+  }, [replay.playing, replay.speed]);
+
+  /* 走到 output 就自动停 */
+  useEffect(() => {
+    if (replay.playing && stageIndex >= stageIds.length - 1) {
+      setReplay((r) => ({ ...r, playing: false }));
+    }
+  }, [replay.playing, stageIndex, stageIds.length]);
+
+  const stepStage = useCallback((delta) => {
+    const ids = stageIdsRef.current;
+    const i = ids.indexOf(selIdRef.current);
+    if (i < 0) return;
+    setSelId(ids[Math.max(0, Math.min(ids.length - 1, i + delta))]);
+    setReplay((r) => ({ ...r, touched: true }));
+  }, []);
+
+  const toggleReplay = useCallback(() => {
+    if (replay.playing) { setReplay((r) => ({ ...r, playing: false })); return; }
+    const ids = stageIdsRef.current;
+    if (ids.indexOf(selIdRef.current) >= ids.length - 1) setSelId(ids[0]);
+    setReplay((r) => ({ ...r, playing: true, touched: true }));
+  }, [replay.playing]);
+
+  const seekStage = useCallback((i) => {
+    const ids = stageIdsRef.current;
+    if (!ids[i]) return;
+    setSelId(ids[i]);
+    setReplay((r) => ({ ...r, playing: false, touched: true }));
+  }, []);
+
+  const setReplaySpeed = useCallback((speed) => setReplay((r) => ({ ...r, speed })), []);
+
+  const resetReplay = useCallback(() => {
+    setSelId(stageIdsRef.current[0]);
+    setReplay((r) => ({ ...r, playing: false, touched: true }));
+  }, []);
+
+  /* 空格播放/暂停，← → 逐层；浮层打开或焦点在控件里时不抢键 */
+  useEffect(() => {
+    const onKey = (e) => {
+      if (headOpen || structureOpen || relOpen) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      if (e.key === 'ArrowRight') { stepStage(1); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft') { stepStage(-1); e.preventDefault(); }
+      else if (e.key === ' ') { toggleReplay(); e.preventDefault(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [stepStage, toggleReplay, headOpen, structureOpen, relOpen]);
+
+  /* 用回放过以后，左侧列表把已经走过的层标出来 */
+  const passedIds = useMemo(
+    () => (replay.touched ? new Set(stageIds.slice(0, stageIndex)) : null),
+    [replay.touched, stageIds, stageIndex],
+  );
+
   const imgsz = meta ? meta.imgsz : 320;
 
   /* ---------- 启动：结构 -> 模型 -> 样例图 ---------- */
@@ -452,6 +529,7 @@ export default function App() {
             layers={layers} selectedId={selId} onSelect={setSelId}
             shapes={shapes} stats={stats} rmsMax={rmsMax}
             incoming={incoming} onOpenGraph={graph ? () => setStructureOpen(true) : null}
+            passed={passedIds}
           />
         </aside>
 
@@ -469,6 +547,15 @@ export default function App() {
           onOpenHead={result ? () => setHeadOpen(true) : null}
           onOpenRelation={relationCta ? relationCta.open : null}
           concatInfo={relationCta ? relationCta.info : null}
+          replay={{
+            layers, shapes, index: stageIndex, playing: replay.playing,
+            speed: replay.speed, touched: replay.touched,
+          }}
+          onReplayToggle={toggleReplay}
+          onReplayStep={stepStage}
+          onReplaySeek={seekStage}
+          onReplaySpeed={setReplaySpeed}
+          onReplayReset={resetReplay}
           version={result ? result.id : 0}
         />
 

@@ -2,6 +2,7 @@
 import FeatureCanvas from '../viz/FeatureCanvas.jsx';
 import ChannelGrid from '../viz/ChannelGrid.jsx';
 import VolStack from '../viz/VolStack.jsx';
+import ReplayBar from './ReplayBar.jsx';
 
 const TABS = [
   { value: '2d', label: '2D 特征图' },
@@ -16,6 +17,7 @@ export default function Viewport(props) {
     viz, setViz, energy, stackItems, stackProgress, stackMode, onSelect,
     resetSignal, isDetectLayer, onOpenHead, version,
     onOpenRelation, concatInfo,
+    replay, onReplayToggle, onReplayStep, onReplaySeek, onReplaySpeed, onReplayReset,
   } = props;
 
   const shownTensor = isDetectLayer ? inputTensor : tensor;
@@ -41,6 +43,22 @@ export default function Viewport(props) {
           {viz.threads ? <span className="pill dim">wasm ×{viz.threads}</span> : null}
         </div>
       </div>
+
+      {replay && replay.layers && replay.layers.length ? (
+        <ReplayBar
+          layers={replay.layers}
+          shapes={replay.shapes}
+          index={replay.index}
+          playing={replay.playing}
+          speed={replay.speed}
+          touched={replay.touched}
+          onToggle={onReplayToggle}
+          onStep={onReplayStep}
+          onSeek={onReplaySeek}
+          onSpeed={onReplaySpeed}
+          onReset={onReplayReset}
+        />
+      ) : null}
 
       <div className="viewport-body">
         {isDetectLayer ? (

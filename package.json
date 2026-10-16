@@ -17,7 +17,8 @@
     "probe:layers": "node tools/layers.mjs http://localhost:5173/ shots",
     "probe:structure": "node tools/probe-structure.mjs http://localhost:5173/ shots",
     "probe:head": "node tools/probe-head.mjs http://localhost:5173/ shots",
-    "probe:relations": "node tools/probe-relations.mjs http://localhost:5173/ shots"
+    "probe:relations": "node tools/probe-relations.mjs http://localhost:5173/ shots",
+    "probe:replay": "node tools/probe-replay.mjs http://localhost:5173/ shots"
   },
   "dependencies": {
     "onnxruntime-web": "^1.30.0",

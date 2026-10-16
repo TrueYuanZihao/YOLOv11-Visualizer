@@ -1,8 +1,16 @@
 /* 左侧流水线：把 27 个阶段按 backbone / neck / head 分组列出，
    每项显示层 id、模块名、张量形状，以及一条「激活强度」小条。 */
 import { groupLabel } from '../model/layers.js';
+import { useEffect, useRef } from 'react';
 
-export default function PipelineList({ layers, selectedId, onSelect, shapes, stats, rmsMax, incoming, onOpenGraph, groupLabel: gl }) {
+export default function PipelineList({ layers, selectedId, onSelect, shapes, stats, rmsMax, incoming, onOpenGraph, groupLabel: gl, passed }) {
+  /* 前向回放时自动把当前层滚进视野（只滚最近的容器，不跳页） */
+  const selRef = useRef(null);
+  useEffect(() => {
+    const el = selRef.current;
+    if (!el || !el.scrollIntoView) return;
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedId]);
   const groups = [];
   for (const l of layers) {
     const g = l.group || 'other';
@@ -33,7 +41,10 @@ export default function PipelineList({ layers, selectedId, onSelect, shapes, sta
               <button
                 key={l.id}
                 type="button"
-                className={'pipe-item' + (l.id === selectedId ? ' is-selected' : '')}
+                ref={l.id === selectedId ? selRef : null}
+                className={'pipe-item'
+                  + (l.id === selectedId ? ' is-selected' : '')
+                  + (passed && passed.has(l.id) ? ' is-passed' : '')}
                 onClick={() => onSelect(l.id)}
                 title={(l.desc || '') + (st ? '  ·  RMS 能量 ' + st.rms.toFixed(3) + '  ·  极值 ' + st.min.toFixed(2) + ' ~ ' + st.max.toFixed(2) : '')}
               >

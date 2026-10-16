@@ -46,7 +46,7 @@ export default function FeatureCanvas(props) {
     if (!el) return undefined;
     const measure = () => {
       const w = el.clientWidth || 480;
-      setSize(Math.max(180, Math.min(w, (window.innerHeight || 900) - 250)));
+      setSize(Math.max(180, Math.min(w, (window.innerHeight || 900) - 296)));
     };
     measure();
     const ro = new ResizeObserver(measure);
