@@ -116,16 +116,26 @@ export default function AnchorGrid(props) {
       ctx.save();
       ctx.setLineDash(st === 'drop' ? [5, 4] : []);
       ctx.globalAlpha = st === 'drop' ? 0.5 : 1;
-      ctx.strokeStyle = BOX_COLOR[st] || BOX_COLOR.pend;
-      ctx.lineWidth = st === 'now' ? 2.4 : 1.3;
-      ctx.strokeRect(b.x1 * s, b.y1 * s, (b.x2 - b.x1) * s, (b.y2 - b.y1) * s);
-      if ((st === 'keep' || st === 'now') && b.label) {
+      const stroke = b.color || BOX_COLOR[st] || BOX_COLOR.pend;
+      const lw = b.width || (st === 'now' ? 2.4 : 1.3);
+      const bx = b.x1 * s;
+      const by = b.y1 * s;
+      const bw = (b.x2 - b.x1) * s;
+      const bh = (b.y2 - b.y1) * s;
+      /* 先描一圈暗边：照片底图上细线容易糊掉，尤其是重叠的候选框 */
+      ctx.strokeStyle = 'rgba(4,8,14,0.55)';
+      ctx.lineWidth = lw + 1.6;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = lw;
+      ctx.strokeRect(bx, by, bw, bh);
+      if (b.label && (st === 'keep' || st === 'now' || b.forceLabel)) {
         ctx.font = '10.5px ui-monospace, Menlo, monospace';
         const tw = ctx.measureText(b.label).width + 7;
         const ty = Math.max(12, b.y1 * s);
         ctx.fillStyle = 'rgba(8,20,16,0.85)';
         ctx.fillRect(b.x1 * s, ty - 12, tw, 12);
-        ctx.fillStyle = BOX_COLOR[st];
+        ctx.fillStyle = stroke;
         ctx.textBaseline = 'bottom';
         ctx.fillText(b.label, b.x1 * s + 3.5, ty - 1.5);
       }

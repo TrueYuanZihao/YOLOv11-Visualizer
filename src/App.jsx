@@ -9,6 +9,8 @@ import { createSession } from './model/session.js';
 import { letterbox, toNCHW } from './model/preprocess.js';
 import { decodeDetections, classHistogram } from './model/detect.js';
 import { HEAD_INPUTS } from './model/headAnatomy.js';
+import { buildHeadReplay, boxesForStage, HEAD_COLOR } from './model/headReplay.js';
+import { GROUP_COLOR } from './state/graphLayout.js';
 import {
   shapeOf, layerStats, channelEnergy, extractChannel, reduceChannels,
   planeRange, normalizePlane, pcaComposite,
@@ -68,6 +70,8 @@ function makeMapCanvas(tensor, shape, opts) {
   });
 }
 
+const NO_STAGES = [];
+
 const DEFAULT_VIZ = {
   colormap: 'viridis',
   gamma: 1,
@@ -102,7 +106,7 @@ export default function App() {
   const [pre, setPre] = useState(null);        // { lb, inputCanvas, inputTensor }
   const [result, setResult] = useState(null);  // { id, t0, ms, map }
 
-  const [selId, setSelId] = useState('m3');
+  const [selId, setSelIdRaw] = useState('m3');
   const [view, setView] = useState('2d');
   const [viz, setViz] = useState(DEFAULT_VIZ);
   const [stackItems, setStackItems] = useState([]);
@@ -124,64 +128,98 @@ export default function App() {
     setRelOpen(true);
   }, []);
 
-  /* ---------- 前向回放：沿 layers 的顺序从 input 走到 output ---------- */
-  const stageIds = useMemo(() => layers.map((l) => l.id), [layers]);
-  const stageIndex = Math.max(0, stageIds.indexOf(selId));
+  /* ---------- 前向回放：沿 layers 顺序从 input 走到 output，再接上检测头解码 ----------
+     层阶段就是换 selId；检测头阶段不是「层」，selId 停在 output，
+     由 headIdx 决定中间视口画哪一步（锚点网格 / 候选框 / NMS 抑制 / 最终框）。 */
+  const layerIds = useMemo(() => layers.map((l) => l.id), [layers]);
+  const layerCount = layerIds.length;
+  const [headIdx, setHeadIdx] = useState(null);
   const [replay, setReplay] = useState({ playing: false, speed: 1, touched: false });
-  const selIdRef = useRef(selId);
-  selIdRef.current = selId;
-  const stageIdsRef = useRef(stageIds);
-  stageIdsRef.current = stageIds;
 
-  /* 自动播放：每 delay 毫秒推进一层；手动点别处也能接管（内部读的是当前选中层） */
+  /* 检测头那几个阶段：候选框与 NMS 过程（和「检测头解剖」共用同一份解码） */
+  const head = useMemo(() => buildHeadReplay({
+    output: result && result.map.output0 ? result.map.output0 : null,
+    imgsz: meta ? meta.imgsz : 320,
+    conf: viz.conf,
+    iou: viz.iou,
+  }), [result, meta, viz.conf, viz.iou]);
+  const headStages = head ? head.stages : NO_STAGES;
+  const headStageIdx = headIdx == null ? null : Math.min(headIdx, Math.max(0, headStages.length - 1));
+  const headStage = headStageIdx == null ? null : (headStages[headStageIdx] || null);
+  const inHead = headIdx != null;
+
+  const totalStages = layerCount + headStages.length;
+  const pos = headIdx == null
+    ? Math.max(0, layerIds.indexOf(selId))
+    : Math.min(layerCount + (headStageIdx || 0), Math.max(0, totalStages - 1));
+
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const layerIdsRef = useRef(layerIds);
+  layerIdsRef.current = layerIds;
+  const headLenRef = useRef(headStages.length);
+  headLenRef.current = headStages.length;
+
+  /* 跳到第 p 个阶段：前 layerCount 个是层，之后是检测头 */
+  const goTo = useCallback((p) => {
+    const ids = layerIdsRef.current;
+    const n = ids.length;
+    const total = n + headLenRef.current;
+    if (!n || !total) return;
+    const q = Math.max(0, Math.min(total - 1, p));
+    if (q < n) { setHeadIdx(null); setSelIdRaw(ids[q]); return; }
+    setHeadIdx(q - n);
+    setSelIdRaw(ids[n - 1]);
+  }, []);
+
+  /* 自动播放：每 delay 毫秒推进一个阶段；检测头那几步走得快些（NMS 的一段就是好几步） */
   useEffect(() => {
     if (!replay.playing) return undefined;
-    const delay = Math.round(900 / replay.speed);
+    const delay = Math.round((inHead ? 620 : 900) / replay.speed);
     const timer = setInterval(() => {
-      const ids = stageIdsRef.current;
-      const i = ids.indexOf(selIdRef.current);
-      if (i >= 0 && i < ids.length - 1) setSelId(ids[i + 1]);
+      const total = layerIdsRef.current.length + headLenRef.current;
+      if (posRef.current < total - 1) goTo(posRef.current + 1);
     }, delay);
     return () => clearInterval(timer);
-  }, [replay.playing, replay.speed]);
+  }, [replay.playing, replay.speed, inHead, goTo]);
 
-  /* 走到 output 就自动停 */
+  /* 走到最后一个阶段就自动停 */
   useEffect(() => {
-    if (replay.playing && stageIndex >= stageIds.length - 1) {
+    if (replay.playing && totalStages > 0 && pos >= totalStages - 1) {
       setReplay((r) => ({ ...r, playing: false }));
     }
-  }, [replay.playing, stageIndex, stageIds.length]);
+  }, [replay.playing, pos, totalStages]);
+
+  /* 走进检测头阶段时切回 2D：那几步只有 2D 画布画得出来 */
+  useEffect(() => {
+    if (inHead) setView('2d');
+  }, [inHead]);
 
   const stepStage = useCallback((delta) => {
-    const ids = stageIdsRef.current;
-    const i = ids.indexOf(selIdRef.current);
-    if (i < 0) return;
-    setSelId(ids[Math.max(0, Math.min(ids.length - 1, i + delta))]);
+    goTo(posRef.current + delta);
     setReplay((r) => ({ ...r, touched: true }));
-  }, []);
+  }, [goTo]);
 
   const toggleReplay = useCallback(() => {
     if (replay.playing) { setReplay((r) => ({ ...r, playing: false })); return; }
-    const ids = stageIdsRef.current;
-    if (ids.indexOf(selIdRef.current) >= ids.length - 1) setSelId(ids[0]);
+    const total = layerIdsRef.current.length + headLenRef.current;
+    if (total && posRef.current >= total - 1) goTo(0);
     setReplay((r) => ({ ...r, playing: true, touched: true }));
-  }, [replay.playing]);
+  }, [replay.playing, goTo]);
 
   const seekStage = useCallback((i) => {
-    const ids = stageIdsRef.current;
-    if (!ids[i]) return;
-    setSelId(ids[i]);
+    goTo(i);
     setReplay((r) => ({ ...r, playing: false, touched: true }));
-  }, []);
+  }, [goTo]);
 
   const setReplaySpeed = useCallback((speed) => setReplay((r) => ({ ...r, speed })), []);
 
   const resetReplay = useCallback(() => {
-    setSelId(stageIdsRef.current[0]);
+    goTo(0);
     setReplay((r) => ({ ...r, playing: false, touched: true }));
-  }, []);
+  }, [goTo]);
 
-  /* 空格播放/暂停，← → 逐层；浮层打开或焦点在控件里时不抢键 */
+  /* 空格播放/暂停，← → 逐层（走到检测头后这两键继续一步一步走）；浮层打开或焦点在控件里时不抢键 */
   useEffect(() => {
     const onKey = (e) => {
       if (headOpen || structureOpen || relOpen) return;
@@ -195,11 +233,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [stepStage, toggleReplay, headOpen, structureOpen, relOpen]);
 
-  /* 用回放过以后，左侧列表把已经走过的层标出来 */
+  /* 用回放过以后，左侧列表把已经走过的层标出来（走到检测头阶段时 27 层全亮） */
   const passedIds = useMemo(
-    () => (replay.touched ? new Set(stageIds.slice(0, stageIndex)) : null),
-    [replay.touched, stageIds, stageIndex],
+    () => (replay.touched ? new Set(layerIds.slice(0, Math.min(pos, layerCount))) : null),
+    [replay.touched, layerIds, pos, layerCount],
   );
+
+  /* 手动选层 / 点标签页 = 退出检测头阶段 */
+  const setSelId = useCallback((id) => { setHeadIdx(null); setSelIdRaw(id); }, []);
 
   const imgsz = meta ? meta.imgsz : 320;
 
@@ -344,6 +385,40 @@ export default function App() {
   const tensor = useMemo(() => tensorOf(layer), [tensorOf, layer]);
   const shape = useMemo(() => (tensor && tensor.dims.length === 4 ? shapeOf(tensor.dims) : null), [tensor]);
   const isDetectLayer = !!(layer && layer.tensor === 'output0');
+
+  /* 回放条上的阶段：27 个层（按分组上色）+ 检测头那几个阶段（琥珀色，一眼看出不再是层） */
+  const replayStages = useMemo(() => {
+    const out = layers.map((l) => ({
+      id: l.id,
+      color: GROUP_COLOR[l.group] || '#8ea0bd',
+      label: l.id,
+      sub: l.block,
+      readout: shapes[l.id] || '',
+      title: l.id + ' · ' + l.block + (l.stride ? ' · s' + l.stride : '')
+        + (shapes[l.id] ? ' · ' + shapes[l.id] : '') + (l.desc ? ' · ' + l.desc : ''),
+    }));
+    for (const s of headStages) {
+      out.push({
+        id: s.key,
+        color: s.color || HEAD_COLOR,
+        head: true,
+        label: s.label,
+        sub: s.sub,
+        readout: s.readout,
+        title: s.desc,
+      });
+    }
+    return out;
+  }, [layers, shapes, headStages]);
+
+  /* 检测头阶段该画哪些框、每框什么状态 */
+  const headBoxes = useMemo(
+    () => (headStage ? boxesForStage(headStage, head, meta ? meta.classNames : null) : null),
+    [headStage, head, meta],
+  );
+
+  /* 点标签页 = 退出检测头阶段，回到层的视图 */
+  const onSetView = useCallback((v) => { setView(v); setHeadIdx(null); }, []);
 
   /* 中间视口里的入口：选中层若是「多路输入按通道拼接」，就给一条通往层间关系的横幅 */
   const relationCta = useMemo(() => {
@@ -534,7 +609,7 @@ export default function App() {
         </aside>
 
         <Viewport
-          view={view} setView={setView}
+          view={view} setView={onSetView}
           layer={layer} tensor={tensor} shape={shape}
           inputTensor={pre ? pre.inputTensor : null}
           inputCanvas={pre ? pre.inputCanvas : null}
@@ -548,9 +623,15 @@ export default function App() {
           onOpenRelation={relationCta ? relationCta.open : null}
           concatInfo={relationCta ? relationCta.info : null}
           replay={{
-            layers, shapes, index: stageIndex, playing: replay.playing,
+            stages: replayStages, index: pos, playing: replay.playing,
             speed: replay.speed, touched: replay.touched,
           }}
+          headStage={headStage ? {
+            stage: headStage,
+            boxes: headBoxes,
+            output: result ? result.map.output0 : null,
+            classNames: meta ? meta.classNames : null,
+          } : null}
           onReplayToggle={toggleReplay}
           onReplayStep={stepStage}
           onReplaySeek={seekStage}

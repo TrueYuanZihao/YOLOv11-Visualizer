@@ -2,6 +2,7 @@
 import FeatureCanvas from '../viz/FeatureCanvas.jsx';
 import ChannelGrid from '../viz/ChannelGrid.jsx';
 import VolStack from '../viz/VolStack.jsx';
+import HeadStage from '../viz/HeadStage.jsx';
 import ReplayBar from './ReplayBar.jsx';
 
 const TABS = [
@@ -18,6 +19,7 @@ export default function Viewport(props) {
     resetSignal, isDetectLayer, onOpenHead, version,
     onOpenRelation, concatInfo,
     replay, onReplayToggle, onReplayStep, onReplaySeek, onReplaySpeed, onReplayReset,
+    headStage,
   } = props;
 
   const shownTensor = isDetectLayer ? inputTensor : tensor;
@@ -36,6 +38,7 @@ export default function Viewport(props) {
         ))}
         <div className="tabs-spacer" />
         <div className="tabs-info">
+          {headStage ? <span className="pill warn">检测头阶段 · {headStage.stage.label}</span> : null}
           {layer ? <span className="pill">{layer.id} · {layer.block}</span> : null}
           {stackProgress < 1 && view !== '2d' && view !== 'grid'
             ? <span className="pill warn">正在生成 3D 纹理 {Math.round(stackProgress * 100)}%</span>
@@ -44,10 +47,9 @@ export default function Viewport(props) {
         </div>
       </div>
 
-      {replay && replay.layers && replay.layers.length ? (
+      {replay && replay.stages && replay.stages.length ? (
         <ReplayBar
-          layers={replay.layers}
-          shapes={replay.shapes}
+          stages={replay.stages}
           index={replay.index}
           playing={replay.playing}
           speed={replay.speed}
@@ -61,7 +63,27 @@ export default function Viewport(props) {
       ) : null}
 
       <div className="viewport-body">
-        {isDetectLayer ? (
+        {headStage ? (
+          <>
+            <div className="banner head">
+              <span>
+                <b>{headStage.stage.label}</b>（{headStage.stage.sub}）：{headStage.stage.desc}
+              </span>
+            </div>
+            <HeadStage
+              stage={headStage.stage}
+              boxes={headStage.boxes}
+              output={headStage.output}
+              imgsz={imgsz}
+              inputCanvas={inputCanvas}
+              classNames={headStage.classNames}
+              colormap={viz.colormap}
+              gamma={viz.gamma}
+            />
+          </>
+        ) : null}
+
+        {isDetectLayer && !headStage ? (
           <div className="banner">
             <span>
               这一层是检测头输出，张量形状为 [1, 84, N]（4 个框坐标 + 80 类分数），并不是图像网格。
@@ -73,7 +95,7 @@ export default function Viewport(props) {
           </div>
         ) : null}
 
-        {concatInfo ? (
+        {concatInfo && !headStage ? (
           <div className="banner concat">
             <span>
               这一层是通道拼接：{concatInfo.segments.map((s) => s.from + ' ' + s.channels).join(' + ')}
@@ -87,7 +109,7 @@ export default function Viewport(props) {
           </div>
         ) : null}
 
-        {view === '2d' ? (
+        {view === '2d' && !headStage ? (
           <FeatureCanvas
             tensor={shownTensor}
             layerId={layer ? layer.id : null}
@@ -105,7 +127,7 @@ export default function Viewport(props) {
           />
         ) : null}
 
-        {view === 'grid' ? (
+        {view === 'grid' && !headStage ? (
           isDetectLayer
             ? <div className="empty">检测头输出是 [1,84,N] 的向量集合，没有通道网格可看。请切换到 3D 特征金字塔查看整体结构。</div>
             : (
@@ -123,7 +145,7 @@ export default function Viewport(props) {
             )
         ) : null}
 
-        {view === 'pyramid' || view === 'channels' ? (
+        {!headStage && (view === 'pyramid' || view === 'channels') ? (
           <div className="v3d-host">
             <VolStack
               items={stackItems}
