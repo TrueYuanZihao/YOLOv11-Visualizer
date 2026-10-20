@@ -24,6 +24,7 @@ import Viewport from './components/Viewport.jsx';
 import StructureOverlay from './components/StructureOverlay.jsx';
 import HeadAnatomy from './components/HeadAnatomy.jsx';
 import LayerRelations from './components/LayerRelations.jsx';
+import GuidedTour from './components/GuidedTour.jsx';
 import { concatBreakdown } from './model/relations.js';
 
 function loadImage(src) {
@@ -97,6 +98,10 @@ export default function App() {
   const [headOpen, setHeadOpen] = useState(false);
   const [relOpen, setRelOpen] = useState(false);
   const [relSeed, setRelSeed] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideDone, setGuideDone] = useState(() => {
+    try { return window.localStorage.getItem('yolo11-guide-done') === '1'; } catch (err) { return false; }
+  });
   const [graphMode, setGraphMode] = useState('arch');
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
@@ -222,7 +227,7 @@ export default function App() {
   /* 空格播放/暂停，← → 逐层（走到检测头后这两键继续一步一步走）；浮层打开或焦点在控件里时不抢键 */
   useEffect(() => {
     const onKey = (e) => {
-      if (headOpen || structureOpen || relOpen) return;
+      if (headOpen || structureOpen || relOpen || guideOpen) return;
       const t = e.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
       if (e.key === 'ArrowRight') { stepStage(1); e.preventDefault(); }
@@ -231,7 +236,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [stepStage, toggleReplay, headOpen, structureOpen, relOpen]);
+  }, [stepStage, toggleReplay, headOpen, structureOpen, relOpen, guideOpen]);
 
   /* 用回放过以后，左侧列表把已经走过的层标出来（走到检测头阶段时 27 层全亮） */
   const passedIds = useMemo(
@@ -241,6 +246,44 @@ export default function App() {
 
   /* 手动选层 / 点标签页 = 退出检测头阶段 */
   const setSelId = useCallback((id) => { setHeadIdx(null); setSelIdRaw(id); }, []);
+
+  /* ---------- 新手引导 ---------- */
+  const closeGuideOverlays = useCallback(() => {
+    setHeadOpen(false);
+    setStructureOpen(false);
+    setRelOpen(false);
+  }, []);
+
+  const startGuide = useCallback(() => {
+    closeGuideOverlays();
+    setView('2d');
+    setHeadIdx(null);
+    setSelIdRaw('m3');
+    setReplay((r) => ({ ...r, playing: false }));
+    setGuideOpen(true);
+  }, [closeGuideOverlays]);
+
+  const leaveGuideStep = useCallback(() => {
+    closeGuideOverlays();
+    setReplay((r) => (r.playing ? { ...r, playing: false } : r));
+  }, [closeGuideOverlays]);
+
+  const enterGuideStep = useCallback((id) => {
+    if (id !== 'replay') return;
+    goTo(0);
+    setReplay((r) => ({ ...r, playing: false, touched: false }));
+  }, [goTo]);
+
+  const closeGuide = useCallback(() => {
+    setGuideOpen(false);
+    leaveGuideStep();
+  }, [leaveGuideStep]);
+
+  const finishGuide = useCallback(() => {
+    closeGuide();
+    setGuideDone(true);
+    try { window.localStorage.setItem('yolo11-guide-done', '1'); } catch (err) { /* noop */ }
+  }, [closeGuide]);
 
   const imgsz = meta ? meta.imgsz : 320;
 
@@ -580,13 +623,22 @@ export default function App() {
             <p>真实预训练权重 · 逐层激活 · 3D 特征堆叠</p>
           </div>
         </div>
-        <div className="topbar-mid">
+        <div className="topbar-mid" data-tour="topbar-actions">
           <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>选择图片</button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
           <button type="button" className="btn ghost" onClick={useSample}>示例图</button>
-          <button type="button" className="btn accent" disabled={!result} onClick={() => setHeadOpen(true)}>检测头解剖</button>
-          <button type="button" className="btn accent" disabled={!result || !graph} onClick={() => openRelations(null)}>层间关系</button>
-          <button type="button" className="btn accent" disabled={!graph} onClick={() => setStructureOpen(true)}>网络结构图</button>
+          <button
+            type="button"
+            className={guideDone ? 'guide-btn is-done' : 'guide-btn'}
+            disabled={!result || !graph}
+            onClick={startGuide}
+            title="约 6 分钟，边操作边理解界面"
+          >
+            <span className="guide-mark">?</span>{guideDone ? '复习引导' : '新手引导'}
+          </button>
+          <button type="button" className="btn accent" data-tour="head-open" disabled={!result} onClick={() => setHeadOpen(true)}>检测头解剖</button>
+          <button type="button" className="btn accent" data-tour="relations-open" disabled={!result || !graph} onClick={() => openRelations(null)}>层间关系</button>
+          <button type="button" className="btn accent" data-tour="structure-open" disabled={!graph} onClick={() => setStructureOpen(true)}>网络结构图</button>
           <span className="pill" title="也可以把图片直接拖到页面上">{imageName || '未选择图片'}</span>
         </div>
         <div className="topbar-right">
@@ -640,7 +692,7 @@ export default function App() {
           version={result ? result.id : 0}
         />
 
-        <aside className="col-right">
+        <aside className="col-right" data-tour="right-rail">
           <ControlPanel
             viz={viz} setViz={setViz} view={view}
             channelCount={shape ? shape.C : 0}
@@ -714,6 +766,23 @@ export default function App() {
           onClose={() => setRelOpen(false)}
           onGoToLayer={(id) => { setRelOpen(false); if (id) setSelId(id); }}
           onOpenHead={result.map.output0 ? () => { setRelOpen(false); setHeadOpen(true); } : null}
+        />
+      ) : null}
+
+      {guideOpen ? (
+        <GuidedTour
+          ctx={{
+            selId,
+            view,
+            structureOpen,
+            headOpen,
+            relOpen,
+            replayPlaying: replay.playing,
+          }}
+          onLeaveStep={leaveGuideStep}
+          onStepEnter={enterGuideStep}
+          onClose={closeGuide}
+          onFinish={finishGuide}
         />
       ) : null}
     </div>

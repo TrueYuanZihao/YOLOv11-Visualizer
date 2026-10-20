@@ -20,6 +20,7 @@ export default function ReplayBar(props) {
     <div className={'rp' + (playing ? ' is-playing' : '') + (touched ? ' is-touched' : '')}>
       <button
         type="button"
+        data-tour="replay-play"
         className={'rp-play' + (playing ? ' is-on' : '')}
         onClick={onToggle}
         title="从当前这一步继续往后放；走到最后一步会自动停，再点一次从头开始"

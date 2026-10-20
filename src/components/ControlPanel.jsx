@@ -47,7 +47,7 @@ export default function ControlPanel({ viz, setViz, view, channelCount, isDetect
       <div className="ctl-grid">
         <label className="ctl">
           <span className="ctl-label">配色</span>
-          <select value={viz.colormap} onChange={(e) => set({ colormap: e.target.value })}>
+          <select data-tour="colormap" value={viz.colormap} onChange={(e) => set({ colormap: e.target.value })}>
             {COLORMAPS.map((c) => <option key={c} value={c}>{COLORMAP_LABELS[c] || c}</option>)}
           </select>
         </label>

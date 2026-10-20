@@ -152,7 +152,7 @@ export default function FeatureCanvas(props) {
   };
 
   return (
-    <div className="featcanvas" ref={wrapRef}>
+    <div className="featcanvas" data-tour="feature-canvas" ref={wrapRef}>
       <canvas
         ref={canvasRef}
         className="featcanvas-canvas"

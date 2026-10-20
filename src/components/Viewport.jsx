@@ -30,7 +30,7 @@ export default function Viewport(props) {
 
   return (
     <section className="viewport">
-      <div className="tabs">
+      <div className="tabs" data-tour="view-tabs">
         {TABS.map((t) => (
           <button type="button" key={t.value}
             className={'tab' + (view === t.value ? ' is-on' : '')}

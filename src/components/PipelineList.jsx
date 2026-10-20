@@ -41,6 +41,7 @@ export default function PipelineList({ layers, selectedId, onSelect, shapes, sta
               <button
                 key={l.id}
                 type="button"
+                data-tour-layer={l.id}
                 ref={l.id === selectedId ? selRef : null}
                 className={'pipe-item'
                   + (l.id === selectedId ? ' is-selected' : '')
