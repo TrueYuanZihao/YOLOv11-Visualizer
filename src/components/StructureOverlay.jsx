@@ -2,6 +2,7 @@
    点节点 = 选中该层；「回中间看数据」按钮关闭本页，中间的视图就停在这一层上。 */
 import { useEffect, useMemo } from 'react';
 import GraphView from '../viz/GraphView.jsx';
+import CausalTracePanel from './CausalTracePanel.jsx';
 import { GROUP_COLOR, levelTag } from '../state/graphLayout.js';
 
 function fmt(v) {
@@ -14,7 +15,7 @@ function fmt(v) {
 export default function StructureOverlay({
   graph, meta, selectedId, onSelect, onClose, previewUrl, stats, onGoToLayer,
   previewSource, onPreviewSource, graphMode, onGraphMode,
-  onDissect,
+  onDissect, causalTrace, inputCanvas,
 }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -56,6 +57,11 @@ export default function StructureOverlay({
             {meta.onnxNodes || '—'} 个算子 · {meta.modules || '—'} 个模块 · {graph.edges.length} 条连边
           </span>
           <span className="pill ok">连边由 ONNX 计算图自动提取</span>
+          {causalTrace ? (
+            <span className="pill trace">
+              因果回溯 · {causalTrace.detection.className} · {causalTrace.sourceScale}
+            </span>
+          ) : null}
         </div>
         <div className="so-head-right">
           <div className="so-modes">
@@ -74,9 +80,15 @@ export default function StructureOverlay({
       </header>
 
       <div className="so-body">
-        <GraphView graph={graph} selectedId={selectedId} onSelect={onSelect} mode={graphMode} />
+        <GraphView
+          graph={graph} selectedId={selectedId} onSelect={onSelect}
+          mode={graphMode} causalTrace={causalTrace}
+        />
 
         <aside className="so-detail">
+          {causalTrace ? (
+            <CausalTracePanel trace={causalTrace} inputCanvas={inputCanvas} compact />
+          ) : null}
           {!node ? <p className="panel-desc">点击图中任意节点查看该层的输入来源、统计与说明。</p> : null}
 
           {node ? (

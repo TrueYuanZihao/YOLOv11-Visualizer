@@ -9,6 +9,8 @@ import {
 } from './field.js';
 import { planeToCanvas, rgbaToCanvas } from './render.js';
 import { lut } from './colormap.js';
+import { detectionKey } from '../model/causalTrace.js';
+import { drawCausalTrace } from './traceOverlay.js';
 
 function buildRgb(data, C, H, W, gamma) {
   const n = H * W;
@@ -34,12 +36,14 @@ export default function FeatureCanvas(props) {
   const {
     tensor, layerId, mapMode, channel, colormap, gamma, rangeMode,
     overlay, showBoxes, dets, imgsz, inputCanvas, version,
+    causalTrace, onSelectDet, onClearTrace,
   } = props;
 
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const [size, setSize] = useState(480);
   const [probe, setProbe] = useState(null);
+  const [hoverDetKey, setHoverDetKey] = useState(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -113,7 +117,11 @@ export default function FeatureCanvas(props) {
       ctx.font = Math.max(10, px / 34) + 'px system-ui, sans-serif';
       ctx.textBaseline = 'bottom';
       for (const d of dets) {
-        ctx.strokeStyle = 'rgba(120,255,190,0.95)';
+        const key = detectionKey(d);
+        if (causalTrace && key === causalTrace.key) continue;
+        const isHover = hoverDetKey === key;
+        ctx.strokeStyle = isHover ? '#ffd166' : 'rgba(120,255,190,0.95)';
+        ctx.lineWidth = Math.max(1.2, px / 320) * (isHover ? 1.8 : 1);
         ctx.strokeRect(d.x1 * s, d.y1 * s, (d.x2 - d.x1) * s, (d.y2 - d.y1) * s);
         const label = d.className + ' ' + d.score.toFixed(2);
         const tw = ctx.measureText(label).width + 6;
@@ -124,7 +132,8 @@ export default function FeatureCanvas(props) {
         ctx.fillText(label, d.x1 * s + 3, ty);
       }
     }
-  }, [built, overlay, showBoxes, dets, imgsz, size, inputCanvas, tensor]);
+    if (causalTrace) drawCausalTrace(ctx, causalTrace, px / imgsz, { labels: true });
+  }, [built, overlay, showBoxes, dets, imgsz, size, inputCanvas, tensor, causalTrace, hoverDetKey]);
 
   /* 色标图例：把当前配色 + 伽马映射成一条渐变，两端标出真实数值 */
   const legend = useMemo(() => {
@@ -140,7 +149,24 @@ export default function FeatureCanvas(props) {
     return 'linear-gradient(90deg,' + stops.join(',') + ')';
   }, [built, colormap, gamma]);
 
+  const detectAt = (ev) => {
+    if (!showBoxes || !dets || !dets.length || !imgsz) return null;
+    const rect = ev.currentTarget.getBoundingClientRect();
+    const x = ((ev.clientX - rect.left) / rect.width) * imgsz;
+    const y = ((ev.clientY - rect.top) / rect.height) * imgsz;
+    let best = null;
+    let area = Infinity;
+    for (const d of dets) {
+      if (x < d.x1 || x > d.x2 || y < d.y1 || y > d.y2) continue;
+      const a = (d.x2 - d.x1) * (d.y2 - d.y1);
+      if (a < area) { area = a; best = d; }
+    }
+    return best;
+  };
+
   const onMove = (ev) => {
+    const hit = detectAt(ev);
+    setHoverDetKey(hit ? detectionKey(hit) : null);
     if (!built || !built.plane) { setProbe(null); return; }
     const rect = ev.currentTarget.getBoundingClientRect();
     const W = shape.W;
@@ -151,14 +177,21 @@ export default function FeatureCanvas(props) {
     setProbe({ x, y, value: built.plane[y * W + x] });
   };
 
+  const onClick = (ev) => {
+    const hit = detectAt(ev);
+    if (hit) onSelectDet && onSelectDet(hit);
+    else if (causalTrace && onClearTrace) onClearTrace();
+  };
+
   return (
     <div className="featcanvas" data-tour="feature-canvas" ref={wrapRef}>
       <canvas
         ref={canvasRef}
         className="featcanvas-canvas"
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size, cursor: hoverDetKey ? 'pointer' : 'default' }}
         onMouseMove={onMove}
-        onMouseLeave={() => setProbe(null)}
+        onClick={onClick}
+        onMouseLeave={() => { setProbe(null); setHoverDetKey(null); }}
       />
       {legend ? (
         <div className="legend" title="颜色与激活值的对应关系">
@@ -174,7 +207,9 @@ export default function FeatureCanvas(props) {
             像素 ({probe.x}, {probe.y}) = <b>{probe.value.toFixed(4)}</b>
           </span>
         ) : (
-          <span className="probe dim">鼠标移到图上可读取激活值</span>
+          <span className="probe dim">
+            {causalTrace ? '点击空白处清除因果回溯' : (dets && dets.length ? '点击检测框可回溯 P3/P4/P5 锚点' : '鼠标移到图上可读取激活值')}
+          </span>
         )}
       </div>
     </div>

@@ -19,7 +19,7 @@ export default function Viewport(props) {
     resetSignal, isDetectLayer, onOpenHead, version,
     onOpenRelation, concatInfo,
     replay, onReplayToggle, onReplayStep, onReplaySeek, onReplaySpeed, onReplayReset,
-    headStage,
+    headStage, causalTrace, onSelectDet, onClearTrace, onOpenCausalGraph,
   } = props;
 
   const shownTensor = isDetectLayer ? inputTensor : tensor;
@@ -39,6 +39,7 @@ export default function Viewport(props) {
         <div className="tabs-spacer" />
         <div className="tabs-info">
           {headStage ? <span className="pill warn">检测头阶段 · {headStage.stage.label}</span> : null}
+          {causalTrace ? <span className="pill trace">因果回溯 · {causalTrace.sourceScale}</span> : null}
           {layer ? <span className="pill">{layer.id} · {layer.block}</span> : null}
           {stackProgress < 1 && view !== '2d' && view !== 'grid'
             ? <span className="pill warn">正在生成 3D 纹理 {Math.round(stackProgress * 100)}%</span>
@@ -109,6 +110,19 @@ export default function Viewport(props) {
           </div>
         ) : null}
 
+        {causalTrace && !headStage ? (
+          <div className="banner trace">
+            <span>
+              正在回溯 <b>{causalTrace.detection.className}</b>：
+              预测来自 {causalTrace.sourceId} 的 {causalTrace.sourceScale} 锚点。
+              图中彩色格点是三个尺度的位置投影，虚线框是近似感受野。
+            </span>
+            {onOpenCausalGraph ? (
+              <button type="button" className="btn accent banner-cta" onClick={onOpenCausalGraph}>查看传播路径</button>
+            ) : null}
+          </div>
+        ) : null}
+
         {view === '2d' && !headStage ? (
           <FeatureCanvas
             tensor={shownTensor}
@@ -124,6 +138,9 @@ export default function Viewport(props) {
             imgsz={imgsz}
             inputCanvas={inputCanvas}
             version={version}
+            causalTrace={causalTrace}
+            onSelectDet={onSelectDet}
+            onClearTrace={onClearTrace}
           />
         ) : null}
 

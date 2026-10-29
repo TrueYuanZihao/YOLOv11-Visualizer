@@ -9,6 +9,7 @@ import { createSession } from './model/session.js';
 import { letterbox, toNCHW } from './model/preprocess.js';
 import { decodeDetections, classHistogram } from './model/detect.js';
 import { HEAD_INPUTS } from './model/headAnatomy.js';
+import { buildCausalTrace, detectionKey } from './model/causalTrace.js';
 import { buildHeadReplay, boxesForStage, HEAD_COLOR } from './model/headReplay.js';
 import { GROUP_COLOR } from './state/graphLayout.js';
 import {
@@ -25,6 +26,7 @@ import StructureOverlay from './components/StructureOverlay.jsx';
 import HeadAnatomy from './components/HeadAnatomy.jsx';
 import LayerRelations from './components/LayerRelations.jsx';
 import GuidedTour from './components/GuidedTour.jsx';
+import CausalTracePanel from './components/CausalTracePanel.jsx';
 import { concatBreakdown } from './model/relations.js';
 
 function loadImage(src) {
@@ -103,6 +105,7 @@ export default function App() {
     try { return window.localStorage.getItem('yolo11-guide-done') === '1'; } catch (err) { return false; }
   });
   const [graphMode, setGraphMode] = useState('arch');
+  const [selectedDetKey, setSelectedDetKey] = useState(null);
   const [meta, setMeta] = useState(null);
   const [status, setStatus] = useState({ phase: 'boot', text: '正在初始化…' });
   const [error, setError] = useState(null);
@@ -247,6 +250,19 @@ export default function App() {
   /* 手动选层 / 点标签页 = 退出检测头阶段 */
   const setSelId = useCallback((id) => { setHeadIdx(null); setSelIdRaw(id); }, []);
 
+  const selectDetection = useCallback((det) => {
+    if (!det) { setSelectedDetKey(null); return; }
+    setSelectedDetKey(detectionKey(det));
+    setView('2d');
+    setHeadIdx(null);
+    setSelIdRaw('m23');
+    setReplay((r) => (r.playing ? { ...r, playing: false } : r));
+    setStructureOpen(true);
+  }, []);
+
+  const clearDetection = useCallback(() => setSelectedDetKey(null), []);
+  const openCausalGraph = useCallback(() => setStructureOpen(true), []);
+
   /* ---------- 新手引导 ---------- */
   const closeGuideOverlays = useCallback(() => {
     setHeadOpen(false);
@@ -256,6 +272,7 @@ export default function App() {
 
   const startGuide = useCallback(() => {
     closeGuideOverlays();
+    setSelectedDetKey(null);
     setView('2d');
     setHeadIdx(null);
     setSelIdRaw('m3');
@@ -376,6 +393,28 @@ export default function App() {
   }, [result, meta, viz.conf, viz.iou]);
 
   const detHist = useMemo(() => classHistogram(dets), [dets]);
+
+  const selectedDet = useMemo(
+    () => (selectedDetKey ? dets.find((d) => detectionKey(d) === selectedDetKey) || null : null),
+    [dets, selectedDetKey],
+  );
+  const causalTrace = useMemo(
+    () => (selectedDet && graph ? buildCausalTrace({
+      detection: selectedDet,
+      imgsz: meta ? meta.imgsz : 320,
+      output: result ? result.map.output0 : null,
+      graph,
+    }) : null),
+    [selectedDet, graph, meta, result],
+  );
+
+  useEffect(() => {
+    setSelectedDetKey(null);
+  }, [imageEl, result ? result.id : null]);
+
+  useEffect(() => {
+    if (selectedDetKey && !selectedDet) setSelectedDetKey(null);
+  }, [selectedDetKey, selectedDet]);
 
   /* ---------- 每一层的形状与统计 ---------- */
   const tensorOf = useCallback((layer) => {
@@ -690,9 +729,21 @@ export default function App() {
           onReplaySpeed={setReplaySpeed}
           onReplayReset={resetReplay}
           version={result ? result.id : 0}
+          causalTrace={causalTrace}
+          onSelectDet={selectDetection}
+          onClearTrace={clearDetection}
+          onOpenCausalGraph={openCausalGraph}
         />
 
         <aside className="col-right" data-tour="right-rail">
+          {causalTrace ? (
+            <CausalTracePanel
+              trace={causalTrace}
+              inputCanvas={pre ? pre.inputCanvas : null}
+              onOpenGraph={openCausalGraph}
+              onClear={clearDetection}
+            />
+          ) : null}
           <ControlPanel
             viz={viz} setViz={setViz} view={view}
             channelCount={shape ? shape.C : 0}
@@ -701,7 +752,10 @@ export default function App() {
             onRerun={runInference}
             onResetView={() => setResetSignal((s) => s + 1)}
           />
-          <DetectionList dets={dets} hist={detHist} imgsz={imgsz} />
+          <DetectionList
+            dets={dets} hist={detHist} imgsz={imgsz}
+            selectedKey={selectedDetKey} onSelect={selectDetection}
+          />
           <StatPanel
             layer={layer}
             shape={shape}
@@ -746,6 +800,8 @@ export default function App() {
           onGoToLayer={() => setStructureOpen(false)}
           graphMode={graphMode}
           onGraphMode={setGraphMode}
+          causalTrace={causalTrace}
+          inputCanvas={pre ? pre.inputCanvas : null}
           onDissect={(from, to) => {
             setStructureOpen(false);
             openRelations({ mode: 'skip', edge: from + '->' + to });

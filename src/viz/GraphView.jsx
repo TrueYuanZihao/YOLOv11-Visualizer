@@ -11,7 +11,16 @@ import {
 const MIN_K = 0.18;
 const MAX_K = 3;
 
-export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode = 'arch' }) {
+function arrowFor({ isHot, isCold, isFocus, kind, isTrace }) {
+  if (isTrace) return 'url(#gv-arrow-trace)';
+  if (isHot) return 'url(#gv-arrow-hot)';
+  if (isCold) return 'url(#gv-arrow-cold)';
+  if (kind === 'skip') return 'url(#gv-arrow-skip)';
+  if (isFocus) return 'url(#gv-arrow-hot)';
+  return 'url(#gv-arrow)';
+}
+
+export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode = 'arch', causalTrace = null }) {
   const hostRef = useRef(null);
   const dragRef = useRef(null);
   const fittedRef = useRef(false);
@@ -110,6 +119,9 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
   /* ---------- 拖拽（背景平移 / 节点移动） ---------- */
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    e.preventDefault();
+    const selection = window.getSelection && window.getSelection();
+    if (selection && !selection.isCollapsed) selection.removeAllRanges();
     const host = hostRef.current;
     const el = e.target && e.target.closest ? e.target.closest('[data-node-id]') : null;
     try { host.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
@@ -125,6 +137,7 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
   const onPointerMove = (e) => {
     const d = dragRef.current;
     if (!d) return;
+    e.preventDefault();
     const dx = e.clientX - d.sx;
     const dy = e.clientY - d.sy;
     d.moved = Math.max(d.moved, Math.abs(dx) + Math.abs(dy));
@@ -157,14 +170,34 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onDragStart={(e) => e.preventDefault()}
     >
       <svg className="graph-svg" width={size.w} height={size.h}>
         <defs>
-          <marker id="gv-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 0 L 8 4 L 0 8 z" fill="#5b6f8f" />
+          <marker id="gv-arrow" viewBox="0 0 12 12" refX="10" refY="6"
+            markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <path d="M 2.5 2.5 L 10 6 L 2.5 9.5" fill="none" stroke="#7186a8"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </marker>
-          <marker id="gv-arrow-hot" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 0 L 8 4 L 0 8 z" fill="#4ea3ff" />
+          <marker id="gv-arrow-hot" viewBox="0 0 12 12" refX="10" refY="6"
+            markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <path d="M 2.5 2.5 L 10 6 L 2.5 9.5" fill="none" stroke="#6ab6ff"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </marker>
+          <marker id="gv-arrow-cold" viewBox="0 0 12 12" refX="10" refY="6"
+            markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <path d="M 2.5 2.5 L 10 6 L 2.5 9.5" fill="none" stroke="#5ff0b8"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </marker>
+          <marker id="gv-arrow-skip" viewBox="0 0 12 12" refX="10" refY="6"
+            markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <path d="M 2.5 2.5 L 10 6 L 2.5 9.5" fill="none" stroke="#a78bff"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </marker>
+          <marker id="gv-arrow-trace" viewBox="0 0 12 12" refX="10" refY="6"
+            markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <path d="M 2.5 2.5 L 10 6 L 2.5 9.5" fill="none" stroke="#ffd166"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </marker>
         </defs>
 
@@ -209,12 +242,20 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
             const isHot = !!(hot && hot.edgeKeys.has(e.key));
             const isCold = !!(cold && cold.edgeKeys.has(e.key) && !isHot);
             const isFocus = e.from === focusId || e.to === focusId;
-            const cls = 'gv-edge' + (e.kind === 'skip' ? ' is-skip' : '')
-              + (isHot ? ' is-hot' : '') + (isCold ? ' is-cold' : '')
-              + (isFocus ? ' is-focus' : '') + (selectedId && !isHot && !isCold && !isFocus ? ' is-dim' : '');
+            const inTrace = !!(causalTrace && causalTrace.edgeKeys.has(e.key));
+            const inPrimary = !!(causalTrace && causalTrace.primaryEdgeKeys.has(e.key));
+            let cls = 'gv-edge' + (e.kind === 'skip' ? ' is-skip' : '');
+            if (causalTrace) {
+              cls += inTrace ? ' is-trace' : ' is-trace-dim';
+              if (inPrimary) cls += ' is-trace-primary';
+            } else {
+              cls += (isHot ? ' is-hot' : '') + (isCold ? ' is-cold' : '')
+                + (isFocus ? ' is-focus' : '')
+                + (selectedId && !isHot && !isCold && !isFocus ? ' is-dim' : '');
+            }
             return (
               <g key={e.key} className={cls}>
-                <path d={e.geo.d} markerEnd={isHot || isFocus ? 'url(#gv-arrow-hot)' : 'url(#gv-arrow)'} />
+                <path d={e.geo.d} markerEnd={arrowFor({ isHot, isCold, isFocus, kind: e.kind, isTrace: inTrace })} />
                 {(e.kind === 'skip' || (detail && isFocus && e.len > 150)) && e.shape ? (
                   <g className="gv-elabel" transform={'translate(' + e.geo.mid[0] + ',' + e.geo.mid[1] + ')'}>
                     <rect x={-38} y={-9} width={76} height={17} rx={5} />
@@ -232,9 +273,21 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
               : (GROUP_COLOR[n.group] || '#8ea0bd');
             const isSel = n.id === selectedId;
             const isHotNode = !!(hot && hot.nodes.has(n.id));
-            const cls = 'gv-node' + (isSel ? ' is-selected' : '')
-              + (!isSel && isHotNode ? ' is-hot' : '')
-              + (selectedId && !isSel && !isHotNode ? ' is-dim' : '');
+            const inTraceNode = !!(causalTrace && causalTrace.nodeIds.has(n.id));
+            const isTraceHead = !!(causalTrace && causalTrace.headIds.includes(n.id));
+            const isTraceSource = !!(causalTrace && causalTrace.sourceId === n.id);
+            const isTraceRoot = !!(causalTrace && causalTrace.rootId === n.id);
+            let cls = 'gv-node';
+            if (causalTrace) {
+              cls += inTraceNode ? ' is-trace' : ' is-trace-dim';
+              if (isTraceHead) cls += ' is-trace-head';
+              if (isTraceSource) cls += ' is-trace-source';
+              if (isTraceRoot) cls += ' is-trace-root';
+            } else {
+              cls += (isSel ? ' is-selected' : '')
+                + (!isSel && isHotNode ? ' is-hot' : '')
+                + (selectedId && !isSel && !isHotNode ? ' is-dim' : '');
+            }
             const lv = levelTag(n.stride);
             return (
               <g
@@ -246,6 +299,9 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
                 onPointerEnter={() => setHoverId(n.id)}
                 onPointerLeave={() => setHoverId((h) => (h === n.id ? null : h))}
               >
+                {isTraceHead && causalTrace ? (
+                  <rect className="gv-trace-ring" x={-4} y={-4} width={n.w + 8} height={n.h + 8} rx={12} />
+                ) : null}
                 <rect className="gv-box" width={n.w} height={n.h} rx={9} />
                 <rect className="gv-accent" width={4} height={n.h} rx={2} fill={color} />
                 {showId ? <text className="gv-id" x={14} y={detail ? 21 : 29}>{n.id}</text> : null}
@@ -277,6 +333,7 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
             <span className="sep" />
             <span><i className="line" />顺序连接</span>
             <span><i className="line dash" />跨层跳连</span>
+            {causalTrace ? <><span className="sep" /><span><i className="line trace" />因果路径</span></> : null}
           </>
         ) : (
           <>
@@ -286,6 +343,7 @@ export default function GraphView({ graph, selectedId, onSelect, layoutKey, mode
             <span className="sep" />
             <span><i className="line" />顺序连接</span>
             <span><i className="line dash" />跨层跳连</span>
+            {causalTrace ? <><span className="sep" /><span><i className="line trace" />因果路径</span></> : null}
           </>
         )}
       </div>
