@@ -282,6 +282,7 @@ export default function App() {
 
   const leaveGuideStep = useCallback(() => {
     closeGuideOverlays();
+    setSelectedDetKey(null);
     setReplay((r) => (r.playing ? { ...r, playing: false } : r));
   }, [closeGuideOverlays]);
 
@@ -834,6 +835,11 @@ export default function App() {
             headOpen,
             relOpen,
             replayPlaying: replay.playing,
+            traceActive: !!causalTrace,
+            traceClass: causalTrace ? causalTrace.detection.className : null,
+            traceSourceId: causalTrace ? causalTrace.sourceId : null,
+            traceScale: causalTrace ? causalTrace.sourceScale : null,
+            traceAnchor: causalTrace && causalTrace.sourceAnchor ? causalTrace.sourceAnchor.index : null,
           }}
           onLeaveStep={leaveGuideStep}
           onStepEnter={enterGuideStep}

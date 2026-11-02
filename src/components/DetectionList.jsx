@@ -3,7 +3,7 @@ import { detectionKey } from '../model/causalTrace.js';
 
 export default function DetectionList({ dets, hist, imgsz, onHover, selectedKey, onSelect }) {
   return (
-    <div className="panel">
+    <div className="panel" data-tour="detection-list">
       <div className="panel-title">
         检测结果
         <span className="tag">{dets.length} 个框</span>

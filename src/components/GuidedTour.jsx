@@ -201,6 +201,42 @@ const STEPS = [
     done: (ctx) => ctx.headOpen,
   },
   {
+    id: 'causal',
+    chapter: '追踪检测',
+    title: (ctx) => (ctx.traceActive
+      ? '因果回溯：从一个框反推整条网络'
+      : '这个框到底是由哪些层算出来的？'),
+    body: (ctx) => (
+      ctx.traceActive ? (
+        <>
+          <p>
+            <b>{ctx.traceClass || '这个目标'}</b> 已回溯到
+            <b>{ctx.traceSourceId} · {ctx.traceScale}</b> 的锚点 #{ctx.traceAnchor}。
+            结构图中的 <b>m16 / m19 / m22</b> 是检测头的三路输入，金色路径表示参与这次预测的上游依赖。
+          </p>
+          <p className="tour-note">
+            右侧回溯卡和缩略图显示 P3/P4/P5 三个尺度的位置投影；虚线框是按 4×stride 估算的近似感受野。
+            读完后点“继续”，结构图会自动关闭。
+          </p>
+        </>
+      ) : (
+        <>
+          <p>
+            检测头给出最终框，但一个框并不是凭空出现的。右侧“检测结果”里的每一行都保留了
+            真实锚点编号，可以反查它在 P3/P4/P5 中由哪个尺度预测，以及信号经过了哪些层。
+          </p>
+          <p className="tour-note">点击任意一行检测结果，页面会自动打开结构图并点亮因果路径。</p>
+        </>
+      )
+    ),
+    target: (ctx) => (ctx.traceActive ? '.graphview' : '[data-tour="detection-list"]'),
+    placement: (ctx) => (ctx.traceActive ? 'corner' : 'left'),
+    actionText: (ctx) => (ctx.traceActive
+      ? '观察结构图里的金色路径，以及右侧三个尺度的锚点读数'
+      : '点击右侧「检测结果」中的任意一个框'),
+    done: (ctx) => ctx.traceActive,
+  },
+  {
     id: 'replay',
     chapter: '追踪检测',
     title: '让整条链路自己走一遍',
