@@ -1,7 +1,8 @@
 # YOLO11 特征激活可视化工作坊
 
-用 **真实预训练权重**（`yolo11n.pt`）在浏览器里逐层查看 YOLO11 的特征激活。
-不是示意图：网页里跑的是一次真正的 ONNX 前向传播，每一层的热力图都来自该次推理的真实张量。
+Git提交日志：docs\submission\GIT_COMMIT_HISTORY.md
+Prompt历史快照：docs\submission\AI_PROMPT_HISTORY.md
+技术文档：docs\submission\pdf\YOLO11-Visualizer-Technical-Report.pdf
 
 技术栈：**Vite + React 19 + Three.js + onnxruntime-web（WASM）**。
 
