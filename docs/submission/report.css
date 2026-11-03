@@ -1,0 +1,188 @@
+@page {
+  size: A4;
+  margin: 14mm 14mm 15mm;
+}
+
+html { font-size: 9.8pt; }
+body {
+  margin: 0;
+  color: #182235;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  line-height: 1.55;
+  orphans: 3;
+  widows: 3;
+}
+
+header#title-block-header { display: none; }
+
+.cover {
+  min-height: 258mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-top: 10px solid #2563eb;
+  border-bottom: 4px solid #0f172a;
+  padding: 18mm 12mm;
+  box-sizing: border-box;
+  background: linear-gradient(140deg, #f8fbff 0%, #eef5ff 52%, #ffffff 100%);
+  break-after: page;
+}
+
+.cover-kicker {
+  color: #2563eb;
+  font-size: 13pt;
+  font-weight: 700;
+  letter-spacing: .16em;
+  margin-bottom: 18mm;
+}
+
+.cover h1 {
+  color: #0f172a;
+  font-size: 31pt;
+  line-height: 1.24;
+  margin: 0 0 9mm;
+  break-before: auto;
+  border: 0;
+  padding: 0;
+}
+
+.cover .subtitle {
+  color: #334155;
+  font-size: 15pt;
+  line-height: 1.55;
+  max-width: 145mm;
+  margin-bottom: 22mm;
+}
+
+.cover-meta {
+  font-size: 10.5pt;
+  color: #334155;
+  border-left: 4px solid #2563eb;
+  padding-left: 7mm;
+}
+
+.cover-meta table { width: 100%; margin: 0; border: 0; font-size: 10.5pt; background: transparent; }
+.cover-meta thead { display: none; }
+.cover-meta td { border: 0; padding: 2mm 4mm 2mm 0; background: transparent !important; }
+.cover-meta td:first-child { width: 34mm; color: #0f172a; }
+.cover-meta b { color: #0f172a; }
+.cover-note { margin-top: 19mm; color: #64748b; font-size: 9pt; }
+
+h1, h2, h3, h4 { color: #0f172a; break-after: avoid-page; }
+h1 {
+  font-size: 18pt;
+  margin: 7mm 0 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 2px solid #dbeafe;
+  break-before: auto;
+}
+h2 { font-size: 12.8pt; margin: 5mm 0 2mm; }
+h3 { font-size: 10.8pt; margin: 4mm 0 1.5mm; }
+p { margin: 0 0 2.1mm; text-align: justify; }
+a { color: #1d4ed8; text-decoration: none; }
+
+.abstract {
+  background: #f5f9ff;
+  border: 1px solid #dbeafe;
+  border-left: 5px solid #2563eb;
+  border-radius: 3mm;
+  padding: 4mm 5mm;
+  margin: 3mm 0 4mm;
+}
+
+.keywords { color: #475569; font-size: 9.5pt; margin-top: 3mm; }
+.lead { color: #334155; font-size: 11pt; }
+.note { color: #475569; font-size: 9.3pt; }
+.warning {
+  background: #fff8eb;
+  border: 1px solid #f5d28d;
+  border-left: 4px solid #d97706;
+  padding: 3.5mm 4.5mm;
+  margin: 3mm 0 4mm;
+}
+
+.toc { columns: 2; column-gap: 12mm; font-size: 10pt; margin: 4mm 0 8mm; }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li { break-inside: avoid; margin-bottom: 2.4mm; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 3mm 0 5mm;
+  font-size: 8.3pt;
+  line-height: 1.45;
+  break-inside: avoid-page;
+}
+thead { background: #eaf2ff; }
+th, td { border: 1px solid #cbd5e1; padding: 1.5mm 1.9mm; vertical-align: top; }
+th { color: #0f172a; text-align: left; font-weight: 700; }
+tbody tr:nth-child(even) { background: #f8fafc; }
+
+code {
+  font-family: "Cascadia Mono", "Consolas", "Noto Sans Mono CJK SC", monospace;
+  font-size: .9em;
+  background: #eff6ff;
+  color: #1e3a8a;
+  padding: .2mm 1mm;
+  border-radius: 1mm;
+}
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 2.5mm;
+  padding: 3.5mm 4.5mm;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-size: 8.6pt;
+  line-height: 1.5;
+  break-inside: avoid-page;
+}
+pre code { background: transparent; color: inherit; padding: 0; }
+
+figure {
+  margin: 2mm 0 4mm;
+  text-align: center;
+  break-inside: avoid-page;
+}
+figure img {
+  display: block;
+  width: 100%;
+  max-height: 72mm;
+  object-fit: contain;
+  margin: 0 auto 2mm;
+  border: 1px solid #cbd5e1;
+  border-radius: 2mm;
+  background: #0b1220;
+}
+figcaption { color: #64748b; font-size: 8.8pt; line-height: 1.45; }
+
+.figure-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+  break-inside: avoid-page;
+}
+.figure-pair figure { margin: 2mm 0 4mm; }
+.figure-pair figure img { max-height: 56mm; }
+
+.callout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm 4mm;
+  margin: 3mm 0 5mm;
+}
+.callout {
+  border: 1px solid #dbeafe;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+  background: #f8fbff;
+}
+.callout b { color: #1d4ed8; }
+.callout p { margin: 1mm 0 0; font-size: 9.2pt; }
+
+.page-break { break-after: page; height: 0; }
+.no-break { break-inside: avoid-page; }
+
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -69,6 +69,7 @@ runs/
 shots/
 *.err.txt
 build.log
+docs/submission/pdf/report.html
 
 # ---------------------------------------------------------------------------
 # 环境变量与密钥

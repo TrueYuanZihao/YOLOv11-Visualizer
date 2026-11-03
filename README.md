@@ -7,12 +7,69 @@
 
 ---
 
-## 快速开始
+## 10 分钟极速复现（评审版）
+
+### 环境要求
+
+| 项目 | 要求 |
+| --- | --- |
+| Node.js | **≥ 22.12.0**（Vite 8、Rolldown、puppeteer-core 要求；推荐 24.21.0） |
+| npm | 随 Node 安装（实测 11.19.0） |
+| 浏览器 | 支持 WebAssembly 的现代 Chromium / Firefox（推荐 Edge / Chrome） |
+| Python / GPU | **运行时不需要**；仅在重新导出 ONNX 时才需要 Python 3.12 |
+| 环境变量 / API Key | **不需要**，见 [`.env.example`](.env.example) |
+
+### 复现步骤
 
 ```powershell
-npm install          # 会自动把 onnxruntime-web 的 wasm 运行时复制到 public/ort
-npm run dev          # http://localhost:5173
+git clone https://github.com/TrueYuanZihao/YOLOv11-Visualizer.git
+cd YOLOv11-Visualizer
+npm ci               # 按 lockfile 安装；postinstall 自动生成 public/ort
+npm run dev          # 浏览器打开 http://localhost:5173/
 ```
+
+请使用 `npm ci` 按锁文件安装；`npm install` 只用于主动修改依赖。项目通过 `.npmrc` 和 `tools/check-node.mjs` 强制检查 Node 版本。
+首次启动会自动加载示例图和模型，并执行一次真实前向，不需要登录、上传图片或填写密钥。
+
+### 常见问题：`Cannot find native binding`
+
+这个错误通常不是源码问题，而是 Node.js 版本过低（例如 `22.11.0`），或切换 Node 后沿用了旧 `node_modules`，导致 Rolldown 的 Windows 原生绑定没有安装。请完整执行：
+
+```powershell
+nvm install 24.21.0
+nvm use 24.21.0
+node -v                 # 必须 >= 22.12.0
+Remove-Item -Recurse -Force node_modules
+npm ci
+npm run dev
+```
+
+如果终端处于 Conda 的 `(base)` 环境，先运行 `conda deactivate`，再用 `where.exe node` 确认当前使用的是 nvm 安装的 Node，而不是 Conda 自带的旧版本。不要只执行 `npm install` 覆盖安装，也不要删除 `package-lock.json`。
+
+### 时间表
+
+| 时间 | 动作 | 成功标志 |
+| --- | --- | --- |
+| 0–1 min | 检查 Node / npm | `node -v`、`npm -v` 正常输出 |
+| 1–4 min | `npm ci` | 依赖完成，`public/ort/` 中出现 WASM |
+| 4–5 min | `npm run dev` | 终端显示本地 URL |
+| 5–7 min | 打开页面等待推理 | 顶栏显示 `前向完成 · … ms · 拿到 25 个张量` |
+| 7–9 min | 点 `m12`、切 3D、打开结构图 | 热力图、27 节点、32 边、6 跳连可见 |
+| 9–10 min | 点检测框、打开新手引导 | 三尺度锚点、因果路径与 12 步引导可用 |
+
+### 复现验收
+
+```powershell
+npm run build        # 生产构建
+npm run probe        # 主界面四视图 + 控制台错误
+npm run probe:head   # 检测头与 2100 个锚点
+npm run probe:replay # 前向回放与检测头阶段
+npm run probe:causal # 因果回溯进入引导 + m16/m19/m22 路径
+```
+
+探针需在 `npm run dev` 运行期间执行，截图写到 `shots/`（已忽略）。
+完整依赖、模型契约与确定性论证见 [`docs/submission/TECHNICAL_REPORT.md`](docs/submission/TECHNICAL_REPORT.md)；
+真实 AI 对话快照见 [`docs/submission/AI_PROMPT_HISTORY.md`](docs/submission/AI_PROMPT_HISTORY.md)。
 
 想自己重新导出模型（需要仓库里的 Python 环境）：
 
@@ -24,7 +81,7 @@ npm run export:graph # 解析 ONNX 计算图，生成网络拓扑 public/models/
 
 ### 仓库里有什么
 
-入库（约 **16 MB / 50 个文件**）：
+入库（约 **20 MB / 80 个文件**）：
 
 | 内容 | 说明 |
 | --- | --- |
@@ -32,7 +89,6 @@ npm run export:graph # 解析 ONNX 计算图，生成网络拓扑 public/models/
 | `public/models/yolo11n_vis.onnx` | 10 MB，跑起来必需，已入库 |
 | `public/models/layers.json` `public/samples/street.jpg` | 层清单与示例图 |
 | `public/models/graph.json` | 约 10 KB，网络拓扑（节点 + 连边），结构图必需 |
-| `YOLOv11 架构.svg` | 283 KB，架构图的排布参考图（仅作文档，运行时不加载） |
 | `ultralytics-main/ultralytics/yolo11n.pt` | 5.4 MB，只为「重新导出 ONNX」保留 |
 
 不入库（`.gitignore` 已排除，都能一条命令再生）：
@@ -132,7 +188,7 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
 左上角 **网络结构图** 按钮打开整屏的结构视图。它不是按 `layers.json` 顺序画的一条线，
 而是 `tools/export_graph.py` 解析 `yolo11n_vis.onnx` 的 **581 个算子**、按 `/model.<N>/` 前缀
 归并成 24 个模块，再统计每个模块真正吃进的外来张量，由此得到 **32 条连边**，其中
-**6 条是跨层跳连**（排布参考了 `YOLOv11 架构.svg`，但节点与连边以 ONNX 为准）：
+**6 条是跨层跳连**（排布参考 YOLO11 官方架构，但节点与连边以 ONNX 为准）：
 
 | 跳连 | 跨度 | 张量 | 含义 |
 | --- | --- | --- | --- |
@@ -147,7 +203,7 @@ street.jpg ──letterbox(114灰边,320×320)──▶ Float32 NCHW ──▶ O
 
 右上角切换（默认 **架构图**）：
 
-- **架构图** —— 与你给的 `YOLOv11 架构.svg` 同构：**纵向是分辨率，横向是处理阶段**。
+- **架构图** —— 与 YOLO11 官方架构同构：**纵向是分辨率，横向是处理阶段**。
   - 最左 `骨干 Backbone`：input / pre / m0…m10 一路向下，stride 逐级翻倍，左侧标出 P1/2 → P5/32 的尺度带。
   - 中间两列是颈部，按**真实方向**画成 U 形：`自顶向下 (FPN)` 由下往上（m11 Upsample → m16），
     `自底向上 (PAN)` 由上往下（m17 Conv s2 → m22 C3k2）。
@@ -326,7 +382,7 @@ tools/
   probe-relations.mjs   层间关系冒烟测试（探针不变量 / 缩放联动 / Concat 只取源段 / 跳连拆解 / 三个入口）
   probe-replay.mjs      前向回放冒烟测试（时间轴段数 / 播放推进 / 手动接管 / 倍速 / 键盘 / 左列表同步与滚动
                          / 检测头阶段：三路锚点网格、候选框数量、NMS 逐段压框、最终框与右侧面板一致）
-legacy/                 第一版「示意内核」可视化，保留作对照
+  probe-causal-tour.mjs 因果回溯 × 引导冒烟测试（第 10/12 步、三路头节点、路径高亮、离开步骤清理）
 ```
 
 ---
